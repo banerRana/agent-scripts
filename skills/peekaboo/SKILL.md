@@ -54,9 +54,10 @@ PB="${PEEKABOO_BIN:-$HOME/bin/peekaboo}"
   This includes `move`, `drag`, targetless/smooth scroll, and targetless keyboard
   input; `click --long-press` is foreground-only. Foreground mode can interrupt
   the user.
-- Background typing, key chords, and paste need a resolvable app/PID and Event
-  Synthesizing permission. Window selectors require foreground mode for these
-  process-targeted keyboard operations.
+- Background type and paste need a resolvable app/PID, a complete inventory with
+  at most one eligible window, and Event Synthesizing permission. Raw `press`
+  additionally requires an exact window selector or fresh exact-window snapshot;
+  app/PID-only chords require explicit foreground mode.
 - Do not click, type, paste, quit, or otherwise mutate UI unless the user asked
   or the target is a controlled test. Re-observe after mutations; never replay
   an indeterminate input blindly.
@@ -98,7 +99,7 @@ open -gj -a Peekaboo
 
 # Process-targeted background keyboard delivery.
 "$PB" type "text" --app TextEdit --json
-"$PB" press cmd+shift+t --app Safari --json
+"$PB" press Return --app TextEdit --window-id 1234 --json
 "$PB" paste "text" --app TextEdit --json
 
 "$PB" tools --json
