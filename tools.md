@@ -61,11 +61,14 @@ Screenshot, screen inspection, and click automation.
 
 **Commands**:
 ```bash
-peekaboo capture                       # Take screenshot
-peekaboo see                           # Describe what's on screen (OCR)
-peekaboo click                         # Click at coordinates
-peekaboo list                          # List windows/apps
-peekaboo tools                         # Show available tools
+peekaboo see --no-elements             # Capture pixels without UI detection
+peekaboo see --tree --no-screenshot    # Inspect Accessibility without capture
+peekaboo click --on ELEMENT_ID --snapshot SNAPSHOT_ID # Act on a fresh observed element
+peekaboo press Return --app TextEdit --window-id 1234 # Send to an exact window
+peekaboo app list                      # List applications
+peekaboo window list --app Safari      # List one application's windows
+peekaboo screen list                   # List displays
+peekaboo tools                         # Show available MCP tools
 peekaboo permissions status            # Check TCC permissions
 ```
 
