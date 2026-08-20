@@ -1,6 +1,6 @@
 ---
 name: codex-first
-description: "Claude Code-only work routing: delegate implementation, fixing, exploratory subagents, rebasing, and PR merging/landing to Codex CLI while Claude specifies, decides, reviews, and verifies. Gate is model-first: if the session's own model is a native Claude model (Fable/Opus/Sonnet/Haiku), delegate regardless of ANTHROPIC_BASE_URL; if it is a non-Claude routed model, work directly. Base-URL loopback check is only the fallback when the model cannot be identified. Codex-backed autoreview is always allowed and preferred, independent of environment."
+description: "Claude Code work routing: delegate implementation, fixing, exploratory subagents, rebasing, and PR merging/landing to Codex CLI while the parent specifies, decides, reviews, and verifies. Load a private codex-next policy first when available; otherwise use the native-Claude model gate. Codex-backed autoreview is always allowed and preferred."
 ---
 
 # Codex First
@@ -13,8 +13,15 @@ not hands-on self-delegation. Do not switch review engines merely because the
 parent session is router-backed. This exception takes precedence over the gate
 below.
 
-For direct hands-on delegation, use this skill only when the active agent is
-Claude Code **and** the session is running on a native Claude model.
+**Private runtime override:** invoke `$codex-next` before evaluating this gate
+when that skill is available. On Peter-managed Macs it may replace the generic
+model-family gate for both coding and exploratory/subagent work. Follow its
+resolved current-model decision; do not continue through the generic gate after
+it has selected an execution surface.
+
+For direct hands-on delegation without a private override, use this skill only
+when the active agent is Claude Code **and** the session is running on a native
+Claude model.
 
 **Model check (primary).** The point of the gate is model economics: Claude
 tokens are metered and expensive, so hands-on work moves to Codex; but if the
