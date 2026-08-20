@@ -107,6 +107,7 @@ command codex exec --yolo -C <repo> \
 
 - Model default: `gpt-5.6-sol`, effort `high`, fast mode on — pin all three explicitly; don't rely on user config.
 - `--yolo` is the house default; Codex may run commands/tests freely. Keep prompts scoped to the target repo.
+- If `--yolo` is unavailable—either the CLI rejects the flag or the selected model/backend rejects unrestricted execution—replace it with `--approve-for-me` and retry once. Never pass both. Preserve every other argument and constraint.
 - `command codex` bypasses any interactive shell alias. If codex isn't on PATH, it depends on how it was installed:
   - node/standalone install: `fnm exec --using default -- codex`
   - ChatGPT desktop app: the CLI ships bundled at `/Applications/ChatGPT.app/Contents/Resources/codex`. Expose **that** binary with an **exec-wrapper, not a symlink**. Ensure `~/.local/bin` stays on PATH (for zsh, persist the export in `~/.zshrc`), then:
@@ -146,6 +147,9 @@ cause, and relaunching unchanged just repeats it:
   publishes, not the one you think you are using.
 - `stream disconnected` / `Reconnecting… 5/5` against a loopback URL — nothing
   is listening there.
+- `requires a sandbox with reviewed escalations` — `--yolo` is unsupported for
+  that route. Retry once with `--approve-for-me`, which selects workspace-write,
+  on-request approvals, and automatic review.
 
 Diagnose the route directly rather than by retrying the agent. One request
 settles it, and it is far cheaper than another failed run:
