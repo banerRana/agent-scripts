@@ -179,6 +179,12 @@ EOF
   export OP_SERVICE_ACCOUNT_TOKEN=package-run-token
   export MOLTY_OP_SERVICE_ACCOUNT_TOKEN=legacy-package-run-token
   export SIGN_IDENTITY='Developer ID Application: Ambient (TEAM)'
+  export MAC_RELEASE_CODESIGN_FUTURE_SENTINEL=must-not-leak
+  export MAC_RELEASE_CLI_CODESIGN_FUTURE_SENTINEL=must-not-leak
+  export MAC_RELEASE_SIGNING_FUTURE_SENTINEL=must-not-leak
+  export MAC_RELEASE_SPARKLE_FUTURE_SENTINEL=must-not-leak
+  export CODESIGN_FUTURE_SENTINEL=must-not-leak
+  export SPARKLE_FUTURE_SENTINEL=must-not-leak
   mac_release_package_run -- bash --noprofile --norc -c '
     [[ "$TEST_SECRET" == already-loaded ]]
     [[ -z "${OP_SERVICE_ACCOUNT_TOKEN+x}" ]]
@@ -192,6 +198,12 @@ EOF
     [[ -z "${MAC_RELEASE_CODESIGN_OP_USE_SERVICE_ACCOUNT+x}" ]]
     [[ -z "${MAC_RELEASE_CODESIGN_KEYCHAIN_MANAGED+x}" ]]
     [[ -z "${MAC_RELEASE_CODESIGN_PASSWORDLESS+x}" ]]
+    [[ -z "${MAC_RELEASE_CODESIGN_FUTURE_SENTINEL+x}" ]]
+    [[ -z "${MAC_RELEASE_CLI_CODESIGN_FUTURE_SENTINEL+x}" ]]
+    [[ -z "${MAC_RELEASE_SIGNING_FUTURE_SENTINEL+x}" ]]
+    [[ -z "${MAC_RELEASE_SPARKLE_FUTURE_SENTINEL+x}" ]]
+    [[ -z "${CODESIGN_FUTURE_SENTINEL+x}" ]]
+    [[ -z "${SPARKLE_FUTURE_SENTINEL+x}" ]]
     [[ -z "${SIGN_IDENTITY+x}" ]]
     [[ -z "${CODESIGN_IDENTITY+x}" ]]
     [[ -z "${SPARKLE_PRIVATE_KEY+x}" ]]
@@ -213,6 +225,12 @@ EOF
   export MAC_RELEASE_OP_USE_SERVICE_ACCOUNT=1
   export MAC_RELEASE_OP_VAULT=Molty
   export SIGN_IDENTITY='Developer ID Application: Ambient (TEAM)'
+  export MAC_RELEASE_CODESIGN_FUTURE_SENTINEL=must-not-leak
+  export MAC_RELEASE_CLI_CODESIGN_FUTURE_SENTINEL=must-not-leak
+  export MAC_RELEASE_SIGNING_FUTURE_SENTINEL=must-not-leak
+  export MAC_RELEASE_SPARKLE_FUTURE_SENTINEL=must-not-leak
+  export CODESIGN_FUTURE_SENTINEL=must-not-leak
+  export SPARKLE_FUTURE_SENTINEL=must-not-leak
   unset TEST_SECRET
   mac_release_package_run -- bash --noprofile --norc -c '
     [[ "$TEST_SECRET" == loaded-value ]]
@@ -227,6 +245,12 @@ EOF
     [[ -z "${MAC_RELEASE_CODESIGN_OP_USE_SERVICE_ACCOUNT+x}" ]]
     [[ -z "${MAC_RELEASE_CODESIGN_KEYCHAIN_MANAGED+x}" ]]
     [[ -z "${MAC_RELEASE_CODESIGN_PASSWORDLESS+x}" ]]
+    [[ -z "${MAC_RELEASE_CODESIGN_FUTURE_SENTINEL+x}" ]]
+    [[ -z "${MAC_RELEASE_CLI_CODESIGN_FUTURE_SENTINEL+x}" ]]
+    [[ -z "${MAC_RELEASE_SIGNING_FUTURE_SENTINEL+x}" ]]
+    [[ -z "${MAC_RELEASE_SPARKLE_FUTURE_SENTINEL+x}" ]]
+    [[ -z "${CODESIGN_FUTURE_SENTINEL+x}" ]]
+    [[ -z "${SPARKLE_FUTURE_SENTINEL+x}" ]]
     [[ -z "${SIGN_IDENTITY+x}" ]]
     [[ -z "${CODESIGN_IDENTITY+x}" ]]
     [[ -z "${SPARKLE_PRIVATE_KEY+x}" ]]

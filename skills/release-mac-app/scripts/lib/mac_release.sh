@@ -1626,31 +1626,17 @@ mac_release_package_run() {
   trap 'mac_release_cleanup_temp_sparkle_key' EXIT
   mac_release_load_1password_env package-only
 
-  local command_rc=0
-  env -u OP_SERVICE_ACCOUNT_TOKEN \
-    -u MOLTY_OP_SERVICE_ACCOUNT_TOKEN \
-    -u MAC_RELEASE_CODESIGN_IDENTITY \
-    -u MAC_RELEASE_CODESIGN_KEYCHAIN \
-    -u MAC_RELEASE_CODESIGN_KEYCHAIN_PASSWORD \
-    -u MAC_RELEASE_CODESIGN_KEYCHAIN_MANAGED \
-    -u MAC_RELEASE_CODESIGN_PASSWORDLESS \
-    -u MAC_RELEASE_CODESIGN_KEYCHAIN_TIMEOUT \
-    -u MAC_RELEASE_CODESIGN_CANARY_TIMEOUT \
-    -u MAC_RELEASE_CODESIGN_OP_ITEM \
-    -u MAC_RELEASE_CODESIGN_OP_ACCOUNT \
-    -u MAC_RELEASE_CODESIGN_OP_VAULT \
-    -u MAC_RELEASE_CODESIGN_OP_USE_SERVICE_ACCOUNT \
-    -u MAC_RELEASE_CODESIGN_OP_PATH_FIELD \
-    -u MAC_RELEASE_CODESIGN_OP_PASSWORD_FIELD \
-    -u MAC_RELEASE_SIGNING_KEY_FILE \
-    -u SIGN_IDENTITY \
-    -u CODESIGN_IDENTITY \
-    -u CODESIGN_KEYCHAIN \
-    -u SPARKLE_PRIVATE_KEY \
-    -u SPARKLE_PRIVATE_KEY_FILE \
-    -u MAC_RELEASE_SPARKLE_KEY_FILE \
-    -u MAC_RELEASE_SPARKLE_OP_REF \
-    "$@" || command_rc=$?
+  local command_rc=0 scrub_name
+  local scrub_args=(-u OP_SERVICE_ACCOUNT_TOKEN -u MOLTY_OP_SERVICE_ACCOUNT_TOKEN -u SIGN_IDENTITY)
+  while IFS= read -r scrub_name; do
+    case "$scrub_name" in
+      MAC_RELEASE_CODESIGN_*|MAC_RELEASE_CLI_CODESIGN_*|MAC_RELEASE_SIGNING_*|MAC_RELEASE_SPARKLE_*|\
+        CODESIGN_*|SPARKLE_*)
+        scrub_args+=(-u "$scrub_name")
+        ;;
+    esac
+  done < <(compgen -v)
+  env "${scrub_args[@]}" "$@" || command_rc=$?
   mac_release_cleanup_temp_sparkle_key
   trap - EXIT
   return "$command_rc"
