@@ -1631,12 +1631,17 @@ mac_release_package_run() {
   while IFS= read -r scrub_name; do
     case "$scrub_name" in
       MAC_RELEASE_CODESIGN_*|MAC_RELEASE_CLI_CODESIGN_*|MAC_RELEASE_SIGNING_*|MAC_RELEASE_SPARKLE_*|\
-        CODESIGN_*|SPARKLE_*)
+        CODESIGN_*|SPARKLE_*|BASH_FUNC_*|BASH_ENV|ENV|CDPATH|GLOBIGNORE)
         scrub_args+=(-u "$scrub_name")
         ;;
     esac
-  done < <(compgen -v)
-  env "${scrub_args[@]}" "$@" || command_rc=$?
+  done < <(builtin compgen -v)
+  for scrub_name in $(builtin compgen -A function); do
+    builtin export -n -f "$scrub_name" 2>/dev/null || true
+  done
+  /usr/bin/env "${scrub_args[@]}" \
+    PATH="${MAC_RELEASE_CALLER_PATH:-/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin}" \
+    /bin/bash --noprofile --norc -p -c '"$@"' mac-release-package "$@" || command_rc=$?
   mac_release_cleanup_temp_sparkle_key
   trap - EXIT
   return "$command_rc"
@@ -1679,8 +1684,20 @@ mac_release_codesign_run() {
   trap cleanup_codesign_run EXIT
 
   mac_release_prepare_codesign_keychain
+  local -a command_scrub_args=(-u BASH_ENV -u ENV -u CDPATH -u GLOBIGNORE)
+  local command_environment_name
+  local command_path="${MAC_RELEASE_CODESIGN_SHIM_DIR:?}:${MAC_RELEASE_CALLER_PATH:-/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin}"
+  while IFS= read -r command_environment_name; do
+    case "$command_environment_name" in
+      BASH_FUNC_*|BASH_ENV|ENV|CDPATH|GLOBIGNORE) command_scrub_args+=(-u "$command_environment_name") ;;
+    esac
+  done < <(builtin compgen -v)
+  for command_environment_name in $(builtin compgen -A function); do
+    builtin export -n -f "$command_environment_name" 2>/dev/null || true
+  done
   local command_rc=0 cleanup_rc=0
-  "$@" || command_rc=$?
+  /usr/bin/env "${command_scrub_args[@]}" PATH="$command_path" \
+    /bin/bash --noprofile --norc -p -c '"$@"' mac-release-codesign "$@" || command_rc=$?
   if ! mac_release_restore_codesign_keychains; then
     sleep 1
     mac_release_restore_codesign_keychains || cleanup_rc=$?

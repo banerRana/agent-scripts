@@ -179,6 +179,8 @@ EOF
   export OP_SERVICE_ACCOUNT_TOKEN=package-run-token
   export MOLTY_OP_SERVICE_ACCOUNT_TOKEN=legacy-package-run-token
   export SIGN_IDENTITY='Developer ID Application: Ambient (TEAM)'
+  package_run_exported_probe() { return 97; }
+  export -f package_run_exported_probe
   export MAC_RELEASE_CODESIGN_FUTURE_SENTINEL=must-not-leak
   export MAC_RELEASE_CLI_CODESIGN_FUTURE_SENTINEL=must-not-leak
   export MAC_RELEASE_SIGNING_FUTURE_SENTINEL=must-not-leak
@@ -208,8 +210,45 @@ EOF
     [[ -z "${CODESIGN_IDENTITY+x}" ]]
     [[ -z "${SPARKLE_PRIVATE_KEY+x}" ]]
     [[ -z "${MAC_RELEASE_SPARKLE_OP_REF+x}" ]]
+    ! declare -F package_run_exported_probe >/dev/null
   '
 )
+
+mkdir -p "$test_root/caller-bin"
+cat >"$test_root/caller-bin/package-path-probe" <<'EOF'
+#!/bin/sh
+[ "$TEST_SECRET" = already-loaded ]
+printf 'caller-path-ok\n' > "$MAC_RELEASE_TEST_ROOT/caller-path-marker"
+EOF
+chmod 755 "$test_root/caller-bin/package-path-probe"
+cp "$test_root/caller-bin/package-path-probe" "$test_root/caller-bin/package=path-probe"
+(
+  trap - EXIT
+  export ROOT="$test_root"
+  export MAC_RELEASE_MANIFEST="$package_manifest"
+  export MAC_RELEASE_TEST_ROOT="$test_root"
+  export MAC_RELEASE_CALLER_PATH="$test_root/caller-bin:/usr/bin:/bin"
+  export TEST_SECRET=already-loaded
+  mac_release_package_run -- package-path-probe
+)
+[[ "$(<"$test_root/caller-path-marker")" == caller-path-ok ]]
+rm -f "$test_root/caller-path-marker"
+(
+  trap - EXIT
+  export ROOT="$test_root" MAC_RELEASE_MANIFEST="$package_manifest" MAC_RELEASE_TEST_ROOT="$test_root"
+  export MAC_RELEASE_CALLER_PATH="$test_root/caller-bin:/usr/bin:/bin" TEST_SECRET=already-loaded
+  mac_release_package_run -- package=path-probe
+)
+[[ "$(<"$test_root/caller-path-marker")" == caller-path-ok ]]
+rm -f "$test_root/caller-path-marker"
+(
+  raw_exported_probe() { return 96; }
+  export -f raw_exported_probe
+  ROOT="$test_root" MAC_RELEASE_MANIFEST="$package_manifest" MAC_RELEASE_TEST_ROOT="$test_root" \
+    TEST_SECRET=already-loaded PATH="$test_root/caller-bin:/usr/bin:/bin" \
+    "$script_dir/mac-release" package-run -- package-path-probe
+)
+[[ "$(<"$test_root/caller-path-marker")" == caller-path-ok ]]
 
 (
   trap - EXIT

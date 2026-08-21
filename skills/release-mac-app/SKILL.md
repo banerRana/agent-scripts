@@ -12,6 +12,8 @@ Use for BlackBar, RepoBar, CodexBar, Trimmy, and similar Sparkle-updated macOS a
 - Work from the app repo.
 - Read `.mac-release.env`; it is the repo-owned release manifest.
 - Use `scripts/mac-release` from this skill for shared release/appcast/verify work.
+- Execute `mac-release` directly so its privileged Bash shebang ignores startup hooks; if an explicit interpreter is
+  unavoidable, use `/bin/bash -p`, never plain `bash mac-release`.
 - Keep app-specific build/package/sign behavior in repo scripts unless it is already manifest-driven.
 - Never print private key material.
 - Prefer `MAC_RELEASE_SPARKLE_OP_REF` for headless release signing when the key is in 1Password; otherwise prefer
