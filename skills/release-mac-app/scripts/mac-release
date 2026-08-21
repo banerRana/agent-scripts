@@ -9,6 +9,11 @@ for raw_service_credential in OP_SERVICE_ACCOUNT_TOKEN MOLTY_OP_SERVICE_ACCOUNT_
   fi
 done
 builtin unset raw_service_credential
+entry_requires_service_custody=false
+for required_entry_value in OP_SERVICE_ACCOUNT_TOKEN MOLTY_OP_SERVICE_ACCOUNT_TOKEN; do
+  [[ -z "${!required_entry_value+x}" ]] || entry_requires_service_custody=true
+done
+builtin unset required_entry_value
 MAC_RELEASE_CALLER_PATH=${MAC_RELEASE_CALLER_PATH:-${PATH:-/usr/bin:/bin}}
 builtin export MAC_RELEASE_CALLER_PATH
 PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin
@@ -30,6 +35,10 @@ while IFS= read -r -d '' raw_function_name; do
 done < "$raw_function_names_file"
 /bin/rm -f "$raw_function_names_file"
 if (("${#raw_function_scrub_args[@]}" > 0)); then
+  if [[ "$entry_requires_service_custody" == true ]]; then
+    /bin/echo 'Service-token invocation refuses an exported-function environment.' >&2
+    builtin exit 1
+  fi
   builtin exec /usr/bin/env "${raw_function_scrub_args[@]}" \
     -u BASH_ENV -u ENV -u CDPATH -u GLOBIGNORE \
     PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin \
