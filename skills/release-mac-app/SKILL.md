@@ -28,6 +28,7 @@ Use for BlackBar, RepoBar, CodexBar, Trimmy, and similar Sparkle-updated macOS a
 /Users/steipete/Projects/agent-scripts/skills/release-mac-app/scripts/mac-release check-assets [tag]
 /Users/steipete/Projects/agent-scripts/skills/release-mac-app/scripts/mac-release release
 /Users/steipete/Projects/agent-scripts/skills/release-mac-app/scripts/mac-release codesign-run [--with-package-secrets] -- <command> [args...]
+/Users/steipete/Projects/agent-scripts/skills/release-mac-app/scripts/mac-release package-run -- <command> [args...]
 ```
 
 ## Manifest
@@ -88,6 +89,7 @@ Common optional:
 - Do not retry `op` reads in a fresh shell; rerun only from the same tmux session after explicit user direction.
 - Never allow a release to reach app packaging with an unprepared Developer ID keychain. No SecurityAgent password windows during release; fail the signing canary first.
 - For non-app release scripts, use `codesign-run` instead of copying keychain setup into the repository. Supply the codesign manifest fields through `.mac-release.env` or explicit `MAC_RELEASE_CODESIGN_*` environment configuration. It loads only codesign credentials by default; pass `--with-package-secrets` when the wrapped release script also needs the configured package/notary fields in the same 1Password pass. It runs the bounded signing canary, scopes `codesign` through the managed-keychain shim, and restores/relocks before returning.
+- Use `package-run` for notarization/package credentials when no signing operation is required. It never resolves, prepares, or unlocks the Developer ID keychain and strips signing and Sparkle authority from the child.
 - Disable shell xtrace and verbose mode before loading release secrets. Arm cleanup before keychain/search-list mutations, restore the dedicated keychain's original lock policy and user search list, and relock it after packaging.
 
 ## Done

@@ -58,20 +58,24 @@ mac_release_load_1password_env() {
   local mode=${1:-all} codesign_passwordless=${MAC_RELEASE_CODESIGN_PASSWORDLESS:-0}
   local primary_missing=0 codesign_missing=0 env_refs_missing=0 sparkle_missing=0 release_op_field
   local env_ref_entry env_ref_name
-  [[ "$mode" == "all" || "$mode" == "codesign-only" || "$mode" == "sparkle-only" ]] ||
+  [[ "$mode" == "all" || "$mode" == "codesign-only" || "$mode" == "package-only" ||
+    "$mode" == "sparkle-only" ]] ||
     mac_release_die "Unknown 1Password load mode: $mode"
-  if [[ "$codesign_passwordless" == "1" ]]; then
+  if [[ "$mode" == "package-only" || "$mode" == "sparkle-only" ]]; then
+    unset MAC_RELEASE_CODESIGN_KEYCHAIN_PASSWORD
+  elif [[ "$codesign_passwordless" == "1" ]]; then
     unset MAC_RELEASE_CODESIGN_KEYCHAIN_PASSWORD
   elif [[ -n "${MAC_RELEASE_CODESIGN_KEYCHAIN_PASSWORD:-}" ]]; then
     export -n MAC_RELEASE_CODESIGN_KEYCHAIN_PASSWORD
   fi
-  if [[ "$mode" == "all" && -n "${MAC_RELEASE_OP_ITEM:-}" ]]; then
+  if [[ "$mode" != "codesign-only" && "$mode" != "sparkle-only" && -n "${MAC_RELEASE_OP_ITEM:-}" ]]; then
     [[ -n "${MAC_RELEASE_OP_FIELDS:-}" ]] || mac_release_die "Set MAC_RELEASE_OP_FIELDS with MAC_RELEASE_OP_ITEM"
     for release_op_field in $MAC_RELEASE_OP_FIELDS; do
       [[ -n "${!release_op_field:-}" ]] || primary_missing=1
     done
   fi
-  if [[ "$mode" != "sparkle-only" && -n "${MAC_RELEASE_CODESIGN_OP_ITEM:-}" ]]; then
+  if [[ "$mode" != "package-only" && "$mode" != "sparkle-only" &&
+    -n "${MAC_RELEASE_CODESIGN_OP_ITEM:-}" ]]; then
     [[ -n "${MAC_RELEASE_CODESIGN_KEYCHAIN:-}" ]] || codesign_missing=1
     if [[ "$codesign_passwordless" != "1" ]]; then
       [[ -n "${MAC_RELEASE_CODESIGN_KEYCHAIN_PASSWORD:-}" ]] || codesign_missing=1
@@ -79,7 +83,8 @@ mac_release_load_1password_env() {
   fi
   # Extra env refs: ';'-separated NAME=op://Vault/Item/field entries (item names
   # may contain spaces, so whitespace cannot be the separator).
-  if [[ "$mode" == "all" && -n "${MAC_RELEASE_OP_ENV_REFS:-}" ]]; then
+  if [[ "$mode" != "codesign-only" && "$mode" != "sparkle-only" &&
+    -n "${MAC_RELEASE_OP_ENV_REFS:-}" ]]; then
     while IFS= read -r env_ref_entry; do
       [[ -n "${env_ref_entry// /}" ]] || continue
       env_ref_name=${env_ref_entry%%=*}
@@ -90,7 +95,8 @@ mac_release_load_1password_env() {
       [[ -n "${!env_ref_name:-}" ]] || env_refs_missing=1
     done < <(tr ';' '\n' <<<"${MAC_RELEASE_OP_ENV_REFS}")
   fi
-  if [[ "$mode" != "codesign-only" && -n "${MAC_RELEASE_SPARKLE_OP_REF:-}" &&
+  if [[ "$mode" != "codesign-only" && "$mode" != "package-only" &&
+    -n "${MAC_RELEASE_SPARKLE_OP_REF:-}" &&
     ! -f "${SPARKLE_PRIVATE_KEY_FILE:-}" ]]; then
     [[ "$MAC_RELEASE_SPARKLE_OP_REF" == op://* ]] ||
       mac_release_die "MAC_RELEASE_SPARKLE_OP_REF must be an op:// reference"
@@ -98,7 +104,7 @@ mac_release_load_1password_env() {
   fi
   if [[ "$primary_missing" != "1" && "$codesign_missing" != "1" &&
     "$env_refs_missing" != "1" && "$sparkle_missing" != "1" ]]; then
-    if [[ "$mode" == "all" ]]; then
+    if [[ "$mode" != "codesign-only" && "$mode" != "sparkle-only" ]]; then
       for release_op_field in ${MAC_RELEASE_OP_FIELDS:-}; do
         export "${release_op_field?}"
       done
@@ -111,7 +117,10 @@ mac_release_load_1password_env() {
     if [[ -n "${MAC_RELEASE_CODESIGN_KEYCHAIN_PASSWORD:-}" ]]; then
       export -n MAC_RELEASE_CODESIGN_KEYCHAIN_PASSWORD
     fi
-    [[ -z "${MAC_RELEASE_CODESIGN_KEYCHAIN:-}" ]] || export MAC_RELEASE_CODESIGN_KEYCHAIN
+    if [[ "$mode" != "package-only" && "$mode" != "sparkle-only" &&
+      -n "${MAC_RELEASE_CODESIGN_KEYCHAIN:-}" ]]; then
+      export MAC_RELEASE_CODESIGN_KEYCHAIN
+    fi
     return 0
   fi
 
@@ -417,7 +426,7 @@ RUNNER
 
   # shellcheck source=/dev/null
   source "$env_file"
-  if [[ "$mode" == "all" ]]; then
+  if [[ "$mode" != "codesign-only" && "$mode" != "sparkle-only" ]]; then
     for release_op_field in ${MAC_RELEASE_OP_FIELDS:-}; do
       export "${release_op_field?}"
       [[ -n "${!release_op_field:-}" ]] || mac_release_die "1Password field did not populate: $release_op_field"
@@ -426,7 +435,8 @@ RUNNER
   if [[ -n "${MAC_RELEASE_CODESIGN_KEYCHAIN_PASSWORD:-}" ]]; then
     export -n MAC_RELEASE_CODESIGN_KEYCHAIN_PASSWORD
   fi
-  if [[ "$mode" != "sparkle-only" && -n "${MAC_RELEASE_CODESIGN_OP_ITEM:-}" ]]; then
+  if [[ "$mode" != "package-only" && "$mode" != "sparkle-only" &&
+    -n "${MAC_RELEASE_CODESIGN_OP_ITEM:-}" ]]; then
     export MAC_RELEASE_CODESIGN_KEYCHAIN
     [[ -n "${MAC_RELEASE_CODESIGN_KEYCHAIN:-}" ]] || mac_release_die "1Password did not populate MAC_RELEASE_CODESIGN_KEYCHAIN"
     if [[ "$codesign_passwordless" != "1" ]]; then
@@ -1579,7 +1589,7 @@ SCRIPT
   echo "Developer ID keychain prepared without GUI interaction."
 }
 
-mac_release_load_codesign_config() {
+mac_release_load_command_config() {
   set +vx
   ROOT=${ROOT:-$(mac_release_root)}
   cd "$ROOT" || mac_release_die "Could not cd to release root: $ROOT"
@@ -1590,6 +1600,10 @@ mac_release_load_codesign_config() {
   elif [[ -n "${MAC_RELEASE_MANIFEST:-}" ]]; then
     mac_release_die "Missing release manifest: $manifest"
   fi
+}
+
+mac_release_load_codesign_config() {
+  mac_release_load_command_config
 
   [[ -n "${MAC_RELEASE_CODESIGN_IDENTITY:-}" ]] ||
     mac_release_die "codesign-run requires MAC_RELEASE_CODESIGN_IDENTITY or a release manifest"
@@ -1602,6 +1616,44 @@ mac_release_load_codesign_config() {
   [[ -z "${MAC_RELEASE_CODESIGN_CANARY_TIMEOUT:-}" ]] || export MAC_RELEASE_CODESIGN_CANARY_TIMEOUT
   CODESIGN_IDENTITY=$MAC_RELEASE_CODESIGN_IDENTITY
   export CODESIGN_IDENTITY
+}
+
+mac_release_package_run() {
+  [[ "${1:-}" == "--" ]] && shift
+  [[ "$#" -gt 0 ]] || mac_release_die "Usage: mac-release package-run -- <command> [args...]"
+
+  mac_release_load_command_config
+  trap 'mac_release_cleanup_temp_sparkle_key' EXIT
+  mac_release_load_1password_env package-only
+
+  local command_rc=0
+  env -u OP_SERVICE_ACCOUNT_TOKEN \
+    -u MOLTY_OP_SERVICE_ACCOUNT_TOKEN \
+    -u MAC_RELEASE_CODESIGN_IDENTITY \
+    -u MAC_RELEASE_CODESIGN_KEYCHAIN \
+    -u MAC_RELEASE_CODESIGN_KEYCHAIN_PASSWORD \
+    -u MAC_RELEASE_CODESIGN_KEYCHAIN_MANAGED \
+    -u MAC_RELEASE_CODESIGN_PASSWORDLESS \
+    -u MAC_RELEASE_CODESIGN_KEYCHAIN_TIMEOUT \
+    -u MAC_RELEASE_CODESIGN_CANARY_TIMEOUT \
+    -u MAC_RELEASE_CODESIGN_OP_ITEM \
+    -u MAC_RELEASE_CODESIGN_OP_ACCOUNT \
+    -u MAC_RELEASE_CODESIGN_OP_VAULT \
+    -u MAC_RELEASE_CODESIGN_OP_USE_SERVICE_ACCOUNT \
+    -u MAC_RELEASE_CODESIGN_OP_PATH_FIELD \
+    -u MAC_RELEASE_CODESIGN_OP_PASSWORD_FIELD \
+    -u MAC_RELEASE_SIGNING_KEY_FILE \
+    -u SIGN_IDENTITY \
+    -u CODESIGN_IDENTITY \
+    -u CODESIGN_KEYCHAIN \
+    -u SPARKLE_PRIVATE_KEY \
+    -u SPARKLE_PRIVATE_KEY_FILE \
+    -u MAC_RELEASE_SPARKLE_KEY_FILE \
+    -u MAC_RELEASE_SPARKLE_OP_REF \
+    "$@" || command_rc=$?
+  mac_release_cleanup_temp_sparkle_key
+  trap - EXIT
+  return "$command_rc"
 }
 
 mac_release_codesign_run() {

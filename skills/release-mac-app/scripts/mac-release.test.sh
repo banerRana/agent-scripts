@@ -155,6 +155,88 @@ chmod +x "$test_root/bin/sign_update"
 # shellcheck source=lib/mac_release.sh
 source "$script_dir/lib/mac_release.sh"
 
+package_manifest="$test_root/package.env"
+cat >"$package_manifest" <<'EOF'
+MAC_RELEASE_OP_ITEM='Release credentials'
+MAC_RELEASE_OP_FIELDS=TEST_SECRET
+MAC_RELEASE_CODESIGN_IDENTITY='Developer ID Application: Fixture (TEAM)'
+MAC_RELEASE_CODESIGN_KEYCHAIN='/tmp/fixture.keychain-db'
+MAC_RELEASE_CODESIGN_KEYCHAIN_PASSWORD='fixture-password'
+MAC_RELEASE_CODESIGN_OP_ITEM='Fixture signing item'
+MAC_RELEASE_CODESIGN_OP_ACCOUNT='fixture.example'
+MAC_RELEASE_CODESIGN_OP_VAULT='Fixture'
+MAC_RELEASE_CODESIGN_OP_USE_SERVICE_ACCOUNT=1
+MAC_RELEASE_CODESIGN_KEYCHAIN_MANAGED=1
+MAC_RELEASE_CODESIGN_PASSWORDLESS=1
+MAC_RELEASE_SPARKLE_OP_REF='op://Release/Fixture/private key'
+SPARKLE_PRIVATE_KEY='fixture-sparkle-key'
+EOF
+(
+  trap - EXIT
+  export ROOT="$test_root"
+  export MAC_RELEASE_MANIFEST="$package_manifest"
+  export TEST_SECRET=already-loaded
+  export OP_SERVICE_ACCOUNT_TOKEN=package-run-token
+  export MOLTY_OP_SERVICE_ACCOUNT_TOKEN=legacy-package-run-token
+  export SIGN_IDENTITY='Developer ID Application: Ambient (TEAM)'
+  mac_release_package_run -- bash --noprofile --norc -c '
+    [[ "$TEST_SECRET" == already-loaded ]]
+    [[ -z "${OP_SERVICE_ACCOUNT_TOKEN+x}" ]]
+    [[ -z "${MOLTY_OP_SERVICE_ACCOUNT_TOKEN+x}" ]]
+    [[ -z "${MAC_RELEASE_CODESIGN_IDENTITY+x}" ]]
+    [[ -z "${MAC_RELEASE_CODESIGN_KEYCHAIN+x}" ]]
+    [[ -z "${MAC_RELEASE_CODESIGN_KEYCHAIN_PASSWORD+x}" ]]
+    [[ -z "${MAC_RELEASE_CODESIGN_OP_ITEM+x}" ]]
+    [[ -z "${MAC_RELEASE_CODESIGN_OP_ACCOUNT+x}" ]]
+    [[ -z "${MAC_RELEASE_CODESIGN_OP_VAULT+x}" ]]
+    [[ -z "${MAC_RELEASE_CODESIGN_OP_USE_SERVICE_ACCOUNT+x}" ]]
+    [[ -z "${MAC_RELEASE_CODESIGN_KEYCHAIN_MANAGED+x}" ]]
+    [[ -z "${MAC_RELEASE_CODESIGN_PASSWORDLESS+x}" ]]
+    [[ -z "${SIGN_IDENTITY+x}" ]]
+    [[ -z "${CODESIGN_IDENTITY+x}" ]]
+    [[ -z "${SPARKLE_PRIVATE_KEY+x}" ]]
+    [[ -z "${MAC_RELEASE_SPARKLE_OP_REF+x}" ]]
+  '
+)
+
+(
+  trap - EXIT
+  export PATH="$test_root/bin:$PATH"
+  export ROOT="$test_root"
+  export MAC_RELEASE_MANIFEST="$package_manifest"
+  export MAC_RELEASE_TEST_ROOT="$test_root"
+  export MAC_RELEASE_TEST_MODE=service
+  export MAC_RELEASE_TEST_TOKEN=package-run-service-token
+  export MAC_RELEASE_TEST_SPARKLE_KEY=unused-package-run-sparkle-key
+  export OP_SERVICE_ACCOUNT_TOKEN=package-run-service-token
+  export MOLTY_OP_SERVICE_ACCOUNT_TOKEN=legacy-package-run-token
+  export MAC_RELEASE_OP_USE_SERVICE_ACCOUNT=1
+  export MAC_RELEASE_OP_VAULT=Molty
+  export SIGN_IDENTITY='Developer ID Application: Ambient (TEAM)'
+  unset TEST_SECRET
+  mac_release_package_run -- bash --noprofile --norc -c '
+    [[ "$TEST_SECRET" == loaded-value ]]
+    [[ -z "${OP_SERVICE_ACCOUNT_TOKEN+x}" ]]
+    [[ -z "${MOLTY_OP_SERVICE_ACCOUNT_TOKEN+x}" ]]
+    [[ -z "${MAC_RELEASE_CODESIGN_IDENTITY+x}" ]]
+    [[ -z "${MAC_RELEASE_CODESIGN_KEYCHAIN+x}" ]]
+    [[ -z "${MAC_RELEASE_CODESIGN_KEYCHAIN_PASSWORD+x}" ]]
+    [[ -z "${MAC_RELEASE_CODESIGN_OP_ITEM+x}" ]]
+    [[ -z "${MAC_RELEASE_CODESIGN_OP_ACCOUNT+x}" ]]
+    [[ -z "${MAC_RELEASE_CODESIGN_OP_VAULT+x}" ]]
+    [[ -z "${MAC_RELEASE_CODESIGN_OP_USE_SERVICE_ACCOUNT+x}" ]]
+    [[ -z "${MAC_RELEASE_CODESIGN_KEYCHAIN_MANAGED+x}" ]]
+    [[ -z "${MAC_RELEASE_CODESIGN_PASSWORDLESS+x}" ]]
+    [[ -z "${SIGN_IDENTITY+x}" ]]
+    [[ -z "${CODESIGN_IDENTITY+x}" ]]
+    [[ -z "${SPARKLE_PRIVATE_KEY+x}" ]]
+    [[ -z "${MAC_RELEASE_SPARKLE_OP_REF+x}" ]]
+  '
+)
+: >"$test_root/tmux.log"
+: >"$test_root/op.log"
+rm -f "$test_root/last-sparkle-path"
+
 service_token='service-token-that-must-never-appear'
 sparkle_test_key='AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA='
 service_output="$test_root/service.output"

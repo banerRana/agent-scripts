@@ -44,6 +44,9 @@ case "$cmd" in
   codesign-run)
     mac_release_codesign_run "$@"
     ;;
+  package-run)
+    mac_release_package_run "$@"
+    ;;
   --public-key)
     mac_release_load
     mac_release_public_key_for_source "${1:-keychain}"
@@ -67,6 +70,7 @@ Commands:
   check-assets [tag]
   sparkle-key-status [keychain|/path/to/key]
   codesign-run [--with-package-secrets] -- <command> [args...]
+  package-run -- <command> [args...]
   release
 EOF
     exit 2
