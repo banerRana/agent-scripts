@@ -1,5 +1,14 @@
 #!/bin/bash -p
 builtin set +vx
+# Keep service-account credentials shell-local until the 1Password loader
+# moves them into its owner-private handoff. The privileged entrypoint's
+# function/environment scrub must not expose raw tokens to subprocesses.
+for raw_service_credential in OP_SERVICE_ACCOUNT_TOKEN MOLTY_OP_SERVICE_ACCOUNT_TOKEN; do
+  if [[ -n "${!raw_service_credential+x}" ]]; then
+    builtin export -n "$raw_service_credential" || builtin exit 1
+  fi
+done
+builtin unset raw_service_credential
 MAC_RELEASE_CALLER_PATH=${MAC_RELEASE_CALLER_PATH:-${PATH:-/usr/bin:/bin}}
 builtin export MAC_RELEASE_CALLER_PATH
 PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin
