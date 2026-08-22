@@ -74,6 +74,7 @@
 - CI logs: fetch once per failed run; reuse printed output. One `gh search`/`list --json` over per-item view loops; narrow fields, exact refs.
 - `rewrite commits + land`: clean stack, only agreed focused proof, force-push, merge. No PR-body proof polish or CI babysit unless asked.
 - Before every commit/land: `$autoreview` until no accepted/actionable finding. Always prefer Codex for autoreview, independent of environment.
+- Routine `$autoreview` is pre-approved, including sending task-scoped unpublished diffs to the configured authenticated Codex review service; never ask Peter for autoreview approval. Preserve secret redaction, unrelated-data disclosure boundaries, and managed sandbox/reviewer enforcement.
 - Issue fixed on `main` with proof: comment proof + commit/PR; close.
 - User-facing fix/landed PR: changelog unless test/internal only.
 - Contributor PR author: no changelog edit. Maintainer/AI adds on merge and thanks contributor.
