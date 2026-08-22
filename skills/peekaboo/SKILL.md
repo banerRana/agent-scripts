@@ -29,9 +29,13 @@ PB="${PEEKABOO_BIN:-$HOME/bin/peekaboo}"
   `~/Library/Application Support/Peekaboo/bridge.sock`. The reusable daemon has
   separate permissions and serves `daemon.sock`; `daemon start` is not an app
   launch.
-- Normal runtime selection prefers a healthy reusable daemon, then the GUI
-  host, before starting a daemon. Use `bridge status --verbose --json` to see
-  the actual selection. When app-held TCC is required, pass
+- Ordinary runtime selection prefers a healthy reusable daemon, then the GUI
+  host, before starting a daemon. Implicit screen-capture observation, AX-tree
+  inspection, browser, and snapshot-state commands instead prefer and may
+  auto-start the current CLI build's exact build-scoped daemon before the GUI
+  host. Use `bridge status --verbose --json` to inspect candidates, but remember
+  that operation requirements can change their order. When app-held TCC is
+  required, pass
   `--bridge-socket "$HOME/Library/Application Support/Peekaboo/bridge.sock"`
   and verify `hostKind: gui` instead of assuming the app was selected.
 - Check `permissions status --all-sources --json`. Grant Screen Recording,
