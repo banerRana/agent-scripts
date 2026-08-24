@@ -1716,7 +1716,12 @@ mac_release_codesign_run() {
     builtin export -n -f "$command_environment_name" 2>/dev/null || true
   done
   local command_rc=0 cleanup_rc=0
+  # Signing tools resolve identities through the account's keychain domain, so
+  # the wrapped command needs a HOME that actually has one. Callers are free to
+  # sandbox HOME for build isolation (goplaces' release-local does), which
+  # otherwise surfaces as "A default keychain could not be found" from codesign.
   /usr/bin/env "${command_scrub_args[@]}" PATH="$command_path" \
+    HOME="$(mac_release_login_home)" \
     /bin/bash --noprofile --norc -p -c '"$@"' mac-release-codesign "$@" || command_rc=$?
   if ! mac_release_restore_codesign_keychains; then
     sleep 1
