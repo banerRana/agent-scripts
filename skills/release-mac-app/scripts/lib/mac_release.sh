@@ -37,6 +37,26 @@ mac_release_expand_home_path() {
   fi
 }
 
+mac_release_login_home() {
+  # The user keychain domain lives under the *account's* home directory. A
+  # caller may hand us an isolated HOME (goplaces' release-local runs the
+  # signing step with HOME pointed at an empty scratch dir), which makes
+  # `security -d user` fail with "A default keychain could not be found".
+  # Resolve the real home from the account database so the check inspects the
+  # same domain regardless of the inherited HOME.
+  local home=""
+  home=$(/usr/bin/dscl . -read "/Users/$(/usr/bin/id -un)" NFSHomeDirectory 2>/dev/null | /usr/bin/awk '{print $2}')
+  if [[ -z $home || ! -d $home ]]; then
+    home=${HOME:-}
+  fi
+  printf '%s' "$home"
+}
+
+mac_release_user_security() {
+  # Run `security` against the real account's keychain domain.
+  HOME="$(mac_release_login_home)" security "$@"
+}
+
 mac_release_sparkle_account_args() {
   local out_var=${1:?"out var"} account
   account=${MAC_RELEASE_SPARKLE_ACCOUNT:-${SPARKLE_ACCOUNT:-}}
@@ -1366,7 +1386,7 @@ mac_release_restore_codesign_keychains() {
   local cleanup_failed=0
   local settings_args=()
   if [[ "${MAC_RELEASE_CODESIGN_SEARCH_PREPARED:-0}" == "1" ]]; then
-    if security list-keychains -d user -s "${MAC_RELEASE_ORIGINAL_KEYCHAINS[@]}"; then
+    if mac_release_user_security list-keychains -d user -s "${MAC_RELEASE_ORIGINAL_KEYCHAINS[@]}"; then
       MAC_RELEASE_ORIGINAL_KEYCHAINS=()
       MAC_RELEASE_CODESIGN_SEARCH_PREPARED=0
     else
@@ -1443,7 +1463,7 @@ mac_release_prepare_codesign_keychain() {
     password=$MAC_RELEASE_CODESIGN_KEYCHAIN_PASSWORD
   fi
   [[ -f "$keychain" ]] || mac_release_die "Developer ID keychain not found: $keychain"
-  default_keychain=$(security default-keychain -d user | sed 's/^[[:space:]]*"//; s/"[[:space:]]*$//')
+  default_keychain=$(mac_release_user_security default-keychain -d user | sed 's/^[[:space:]]*"//; s/"[[:space:]]*$//')
   keychain_file_id=$(stat -L -f '%d:%i' "$keychain")
   default_keychain_file_id=$(stat -L -f '%d:%i' "$default_keychain")
   [[ "$keychain_file_id" != "$default_keychain_file_id" ]] ||
@@ -1453,7 +1473,7 @@ mac_release_prepare_codesign_keychain() {
     mac_release_die "Another macOS release is using the user keychain search list"
   fi
   MAC_RELEASE_CODESIGN_LOCK_HELD=1
-  if ! keychain_list=$(security list-keychains -d user); then
+  if ! keychain_list=$(mac_release_user_security list-keychains -d user); then
     mac_release_restore_codesign_keychains
     mac_release_die "Could not read user keychain search list"
   fi
@@ -1527,7 +1547,7 @@ mac_release_prepare_codesign_keychain() {
     [[ "$existing_keychain" == "$keychain" ]] || signing_search+=("$existing_keychain")
   done
   MAC_RELEASE_CODESIGN_SEARCH_PREPARED=1
-  if ! security list-keychains -d user -s "${signing_search[@]}"; then
+  if ! mac_release_user_security list-keychains -d user -s "${signing_search[@]}"; then
     mac_release_restore_codesign_keychains
     mac_release_die "Could not configure user keychain search list"
   fi
