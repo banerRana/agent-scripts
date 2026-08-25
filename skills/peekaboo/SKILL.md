@@ -99,7 +99,8 @@ open -gj -a Peekaboo
 
 # Use IDs and the snapshot returned by a fresh `see`.
 "$PB" click --on "$ELEMENT_ID" --snapshot "$SNAPSHOT_ID" --json
-"$PB" action AXPress --on "$ELEMENT_ID" --snapshot "$SNAPSHOT_ID" --json
+# Generic `action AXPress` requires explicit foreground consent; use the
+# dedicated exact-target `click` route above for background button activation.
 
 # Process-targeted background keyboard delivery.
 "$PB" type "text" --app TextEdit --json
