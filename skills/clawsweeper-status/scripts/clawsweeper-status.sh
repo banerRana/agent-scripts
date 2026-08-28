@@ -436,10 +436,11 @@ else
   printf -- "- Exact-review queue: unavailable\n"
 fi
 echo
+# Cap groups inside jq so an early-closing reader cannot SIGPIPE the renderer.
 jq -r '[.workflow_runs[]
   | select(.status == "in_progress" or .status == "pending" or .status == "queued" or .status == "waiting" or .status == "requested")
-] | group_by(.name) | sort_by(-length) | .[]
-  | "- \((length))x \((.[0].name)): \((.[0].html_url))"' "$runs_json" | head -20
+] | group_by(.name) | sort_by(-length) | .[0:20][]
+  | "- \((length))x \((.[0].name)): \((.[0].html_url))"' "$runs_json"
 
 print_section() {
   local title="$1"

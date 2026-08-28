@@ -6,6 +6,7 @@ summary: Timeline of guardrail helper changes mirrored from Sweetistics and rela
 
 ## Unreleased
 
+- Fixed `clawsweeper-status` aborting before activity sections on large workflow snapshots while preserving row caps and upstream errors.
 - Fixed `clawsweeper-status` public queue parsing, preserved optional health fields without shifted columns, and added a separate publication-tail summary.
 - Added headless Sparkle signing through scoped 1Password references, with public-key validation, mode-0600 temporary files, and cleanup on success or failure.
 - Corrected GitHub secret provisioning to omit `--body` for stdin and added a skill validation guard against the literal-dash trap.

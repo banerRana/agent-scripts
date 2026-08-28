@@ -10,6 +10,32 @@ cat >"$tmpdir/gh" <<'EOF'
 set -euo pipefail
 printf '%s\n' "$*" >>"${GH_TEST_LOG:?}"
 
+if [ "${GH_TEST_MODE:-}" = producer-failure ] && [ "$1 $2" = 'run list' ]; then
+  printf '%s\n' '[]'
+  echo 'mock run producer failed' >&2
+  exit 37
+fi
+if [ "${GH_TEST_MODE:-}" = required-fetch-failure ] && [ "$1 $2" = 'api graphql' ]; then
+  echo 'mock closed-item fetch failed' >&2
+  exit 38
+fi
+if [ "${GH_TEST_MODE:-}" = malformed-input ] && [ "$1 $2" = 'pr list' ]; then
+  printf '%s\n' '{malformed'
+  exit 0
+fi
+if [ "${GH_TEST_MODE:-}" = volume ]; then
+  case "$1 $2" in
+    'run list') cat "${GH_TEST_FIXTURES:?}/runs.json" ;;
+    'pr list') cat "${GH_TEST_FIXTURES:?}/pulls.json" ;;
+    'api repos/test/target/issues/comments'*) cat "${GH_TEST_FIXTURES:?}/comments.json" ;;
+    'api graphql') cat "${GH_TEST_FIXTURES:?}/closed.json" ;;
+    'api repos/test/sweeper/actions/runs?status='*) printf '%s\n' '[]' ;;
+    'api repos/test/sweeper/contents/config/automation-limits.json'*) printf '%s\n' '{}' ;;
+    *) echo "unexpected volume gh call: $*" >&2; exit 1 ;;
+  esac
+  exit 0
+fi
+
 case "$1 $2" in
   "run list")
     printf '%s\n' '[{"databaseId":11,"name":"Sweep","status":"completed","conclusion":"failure","createdAt":"2099-01-01T00:00:00Z","url":"https://github.test/runs/11"}]'
@@ -90,6 +116,19 @@ cat "${CURL_TEST_FIXTURE:?}"
 EOF
 chmod +x "$tmpdir/curl"
 
+# Fail the workflow renderer itself, so an ignored jq error cannot pass as truncation.
+export JQ_TEST_REAL
+JQ_TEST_REAL="$(command -v jq)"
+cat >"$tmpdir/jq" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+if [ "${JQ_TEST_MODE:-}" = renderer-failure ] && [[ "$*" == *'group_by(.name)'* ]]; then
+  exec "$JQ_TEST_REAL" -n 'error("mock workflow renderer failed")'
+fi
+exec "$JQ_TEST_REAL" "$@"
+EOF
+chmod +x "$tmpdir/jq"
+
 export GH_TEST_LOG="$tmpdir/gh.log"
 export CURL_TEST_LOG="$tmpdir/curl.log"
 public_fixture="$script_dir/fixtures/public-exact-review-queue.json"
@@ -121,9 +160,11 @@ run_case() {
     bash "$script_dir/clawsweeper-status.sh" \
     --repo test/target \
     --clawsweeper-repo test/sweeper \
-    --limit 8 \
-    --run-limit 12 >"$tmpdir/output" 2>"$tmpdir/error" || {
-      printf 'FAIL [%s]: status script failed\n' "$test_case" >&2
+    --hours 1 \
+    --limit "${TEST_LIMIT:-8}" \
+    --run-limit "${TEST_RUN_LIMIT:-12}" >"$tmpdir/output" 2>"$tmpdir/error" || {
+      result=$?
+      printf 'FAIL [%s]: status script exited %s\n' "$test_case" "$result" >&2
       cat "$tmpdir/error" >&2
       exit 1
     }
@@ -297,5 +338,101 @@ done
 printf '%s\n' '[]' >"$tmpdir/queue.json"
 run_case invalid-top-level "$tmpdir/queue.json"
 assert_unavailable
+
+# Stay within the 100-run request bound, but emit far more than a pipe buffer.
+# Forty groups with unequal counts and long names reliably expose early readers.
+export GH_TEST_FIXTURES="$tmpdir"
+jq -n '
+  [range(0; 40) as $group | range(0; 1 + ($group % 4)) as $copy |
+    {databaseId: (1000 + $group * 4 + $copy),
+     name: ("group-" + (100 + $group | tostring) + "-" + ("x" * 16384)),
+     event: "workflow_dispatch", status: "pending", conclusion: null,
+     createdAt: "2099-01-01T00:00:00Z", url: "https://github.test/runs/volume"}]
+' >"$tmpdir/runs.json"
+jq -n '
+  [range(0; 10) | {title: "Merged fixture", url: ("https://github.test/merged/" + tostring),
+    mergedAt: ("2099-01-01T00:00:0" + tostring + "Z")}]
+' >"$tmpdir/pulls.json"
+jq -n '
+  [range(0; 10) | {user: {login: "clawsweeper"},
+    body: (if . % 2 == 0 then "Codex review: clean" else "Applied fix" end),
+    html_url: ("https://github.test/comment/" + tostring),
+    issue_url: ("https://api.github.test/issues/" + tostring)}]
+' >"$tmpdir/comments.json"
+jq -n '
+  [range(0; 10) | {title: "Closed fixture", url: ("https://github.test/closed/" + tostring),
+    closedAt: ("2099-01-01T00:00:0" + tostring + "Z"),
+    timelineItems: {nodes: [{actor: {login: "clawsweeper"}}]}}] |
+  {data: {pulls: {nodes: .[0:5]}, issues: {nodes: .[5:]}}}
+' >"$tmpdir/closed.json"
+GH_TEST_MODE=volume TEST_LIMIT=3 TEST_RUN_LIMIT=100 run_case volume "$public_fixture"
+
+# Verify every group and activity row in order, not just the final heading.
+awk '/^- [0-9]+x / {sub(/-x+:.*/, ""); print}' "$tmpdir/output" >"$tmpdir/groups"
+{
+  for count in 4 3; do
+    for ((group = 100 + count - 1; group < 140; group += 4)); do
+      printf -- '- %sx group-%s\n' "$count" "$group"
+    done
+  done
+} >"$tmpdir/expected-groups"
+diff -u "$tmpdir/expected-groups" "$tmpdir/groups"
+awk '/^## Recently / {print} /^- https:\/\/github.test\// {print $2}' \
+  "$tmpdir/output" >"$tmpdir/activity"
+cat >"$tmpdir/expected-activity" <<'EOF'
+## Recently merged
+https://github.test/merged/9
+https://github.test/merged/8
+https://github.test/merged/7
+## Recently reviewed
+https://github.test/comment/0
+https://github.test/comment/2
+https://github.test/comment/4
+## Recently commented
+https://github.test/comment/1
+https://github.test/comment/3
+https://github.test/comment/5
+## Recently closed
+https://github.test/closed/9
+https://github.test/closed/8
+https://github.test/closed/7
+EOF
+diff -u "$tmpdir/expected-activity" "$tmpdir/activity"
+assert_contains 'run list --repo test/sweeper --limit 100 --json' "$GH_TEST_LOG"
+assert_contains 'status=in_progress&per_page=50 --jq' "$GH_TEST_LOG"
+assert_contains 'issues/comments?sort=updated&direction=desc&per_page=10' "$GH_TEST_LOG"
+assert_contains 'pr list --repo test/target --state merged' "$GH_TEST_LOG"
+assert_contains '--limit 10 --json title,url,mergedAt,mergedBy,labels' "$GH_TEST_LOG"
+assert_contains '-F first=50' "$GH_TEST_LOG"
+assert_not_contains 'run view' "$GH_TEST_LOG"
+[ "$(grep -c '^api repos/test/sweeper/actions/runs?status=' "$GH_TEST_LOG")" -eq 8 ]
+[ "$(grep -c '^\(api\|run\|pr\) ' "$GH_TEST_LOG")" -eq 13 ]
+assert_contains '- Active workflow runs: 100' "$tmpdir/output"
+assert_contains '- Publication tail:' "$tmpdir/output"
+echo 'PASS: high-volume snapshot, row caps/order, and bounded requests'
+
+assert_failure() {
+  test_case="$1"
+  if GH_TEST_MODE="$1" JQ_TEST_MODE="$1" CURL_TEST_FIXTURE="$public_fixture" PATH="$tmpdir:$PATH" \
+    bash "$script_dir/clawsweeper-status.sh" --repo test/target --clawsweeper-repo test/sweeper \
+    --limit 3 --run-limit 12 >"$tmpdir/output" 2>"$tmpdir/error"; then
+    printf 'FAIL [%s]: expected failure\n' "$test_case" >&2
+    exit 1
+  else
+    result=$?
+  fi
+  if [ "$result" -ne "$2" ]; then
+    printf 'FAIL [%s]: expected exit %s, got %s\n' "$test_case" "$2" "$result" >&2
+    cat "$tmpdir/error" >&2
+    exit 1
+  fi
+  assert_contains "$3" "$tmpdir/error"
+  assert_not_contains '## Recently closed' "$tmpdir/output"
+  printf 'PASS: %s exited %s with diagnostic\n' "$test_case" "$result"
+}
+assert_failure producer-failure 37 'mock run producer failed'
+assert_failure required-fetch-failure 38 'mock closed-item fetch failed'
+assert_failure malformed-input 5 'parse error:'
+assert_failure renderer-failure 5 'mock workflow renderer failed'
 
 echo "clawsweeper-status tests passed"

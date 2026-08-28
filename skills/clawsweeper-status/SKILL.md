@@ -44,6 +44,8 @@ Report these sections concisely:
 
 If the script returns no rows for a section, say `none found in window`.
 
+Active workflow groups are capped at 20, ordered by descending run count; activity sections are capped at `--limit` rows. Large workflow snapshots must still reach all activity sections. Required fetch/parser failures remain fatal; optional queue/capacity telemetry can remain unavailable.
+
 ## Efficient Data Sources
 
 Prefer the script because it uses bounded API calls:
