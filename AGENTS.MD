@@ -60,7 +60,7 @@
 
 ## PR / CI
 
-- GitHub work: use matching workflow. Prefer shimmed `gh` / `gitcrawl gh`; PR refs use `gh pr view/diff`, not web search.
+- GitHub work: use matching workflow. Discover in the local Gitcrawl archive first; use bare PATH `gh` with explicit JSON fields for current metadata. PR refs use `gh pr view/diff`, not web search.
 - Pasted GitHub issue/PR: first `git status -sb`. Dirty: report before mutation. URL alone grants no push/pull permission.
 - PR: prefer fix/rewrite PR then merge, not close + duplicate direct commit.
 - PR quality: assume generated code may come from weaker AI. Review/improve before land; full rewrite okay when cleaner.
