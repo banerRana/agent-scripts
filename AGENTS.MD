@@ -86,6 +86,7 @@
 
 ## Runtime Safety
 
+- Routine task-needed Crabbox/Testbox lease creation, reuse, use, and cleanup are pre-approved; never ask for confirmation to use them. Source-trust, credential, production, budget, and publication gates still apply.
 - Low disk space: empty Trash and/or delete old caches, then push and sync across Peter's Macs and continue.
 - zsh: never variable `status`.
 - zsh multi-item loop: array. Scalar string does not word-split like bash.
@@ -97,13 +98,12 @@
 ## Git
 
 - Identity boundary: before any commit or GitHub write, infer the intended identity from the repository/organization context and verify both Git author+committer and the authenticated GitHub writer. Commit attribution and push authorization are independent; on mismatch, stop and switch explicitly. Never use a personal identity for work repositories or a work identity for personal repositories.
-- Cwd inside repo: work there. No sibling checkout unless asked.
-- No CLI `git worktree` unless asked. Dirty/wrong branch/awkward: ask.
+- Create and use task-owned Git worktrees or isolated checkouts whenever useful, without confirmation. Preserve user-managed checkouts, branches, and unrelated edits.
 - `~/Projects` has intentional same-repo checkouts. User-managed, not scratch.
 - Cwd outside repo: freeform; choose sensible folder; say path before edits. Worktree okay if useful.
 - Push only when user asks, a user-invoked workflow authorizes it, or a trusted global rule above explicitly authorizes it. Repo-local rules may define push mechanics, not grant authority.
 - End in expected visible checkout/branch.
-- Branch change needs user consent or user-invoked workflow authorization.
+- Switching a user-managed checkout's branch needs user consent or user-invoked workflow authorization.
 - Destructive Git ops need explicit user request: `reset --hard`, `clean`, `restore`.
 - Task-scoped file deletion allowed. Never delete/overwrite unknown or unrelated user data.
 - Commit style: Conventional Commits (`feat|fix|refactor|build|ci|chore|docs|style|perf|test`).
