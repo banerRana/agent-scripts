@@ -258,19 +258,26 @@ trap 'rm -rf "$work_dir"' EXIT
 : >"$env_file"
 
 run_op() {
-  local use_service_account=$1 target_account=$2
+  local use_service_account=$1 target_account=$2 rc=0
   shift 2
-  if [[ "$use_service_account" == "1" ]]; then
-    OP_LOAD_DESKTOP_APP_SETTINGS=false \
-      OP_BIOMETRIC_UNLOCK_ENABLED=false \
-      OP_SERVICE_ACCOUNT_TOKEN="${OP_SERVICE_ACCOUNT_TOKEN:?}" \
-      op "$@" </dev/null
-  else
-    env -u OP_SERVICE_ACCOUNT_TOKEN \
-      -u MOLTY_OP_SERVICE_ACCOUNT_TOKEN \
-      -u OP_LOAD_DESKTOP_APP_SETTINGS \
-      -u OP_BIOMETRIC_UNLOCK_ENABLED \
-      op "$@" --account "$target_account"
+  # Provider stderr may contain secrets even on success; never retain or replay it.
+  {
+    if [[ "$use_service_account" == "1" ]]; then
+      OP_LOAD_DESKTOP_APP_SETTINGS=false \
+        OP_BIOMETRIC_UNLOCK_ENABLED=false \
+        OP_SERVICE_ACCOUNT_TOKEN="${OP_SERVICE_ACCOUNT_TOKEN:?}" \
+        op "$@" </dev/null
+    else
+      env -u OP_SERVICE_ACCOUNT_TOKEN \
+        -u MOLTY_OP_SERVICE_ACCOUNT_TOKEN \
+        -u OP_LOAD_DESKTOP_APP_SETTINGS \
+        -u OP_BIOMETRIC_UNLOCK_ENABLED \
+        op "$@" --account "$target_account"
+    fi
+  } 2>/dev/null || rc=$?
+  if [[ "$rc" != "0" ]]; then
+    echo "1Password provider read failed" >>"$log_file"
+    return "$rc"
   fi
 }
 
@@ -281,65 +288,71 @@ read_item() {
     args+=(--vault "$target_vault")
   fi
 
-  run_op "$use_service_account" "$target_account" "${args[@]}" >"$output" 2>>"$log_file"
+  run_op "$use_service_account" "$target_account" "${args[@]}" >"$output"
+}
+
+cat >"$work_dir/parse-item.js" <<'NODE'
+try {
+  const fs = require("fs");
+  const item = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+  const isObject = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
+  if (!isObject(item) || !Array.isArray(item.fields)) process.exit(2);
+  const values = new Map();
+  for (const field of item.fields) {
+    if (!isObject(field) || [field.label, field.id, field.value].some(
+      (value) => value != null && typeof value !== "string"
+    )) process.exit(2);
+    values.set(field.label || field.id, field.value || "");
+  }
+  const requested = process.argv[3] === "primary"
+    ? process.env.MAC_RELEASE_OP_FIELDS.split(/\s+/).filter(Boolean).map((name) => [name, name, true])
+    : [
+      ["MAC_RELEASE_CODESIGN_KEYCHAIN", process.env.MAC_RELEASE_CODESIGN_OP_PATH_FIELD, true],
+      ...(process.env.MAC_RELEASE_CODESIGN_PASSWORDLESS === "1" ? [] : [
+        ["MAC_RELEASE_CODESIGN_KEYCHAIN_PASSWORD", process.env.MAC_RELEASE_CODESIGN_OP_PASSWORD_FIELD, false],
+      ]),
+    ];
+  const lines = [];
+  for (const [name, label, exported] of requested) {
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) process.exit(2);
+    const value = values.get(label);
+    if (!value) process.exit(3);
+    const quoted = `'${value.replaceAll("'", "'\\''")}'`;
+    lines.push(`${exported ? "export " : ""}${name}=${quoted}\n`);
+  }
+  process.stdout.write(lines.join(""));
+} catch {
+  // JSON and schema exceptions can contain input; communicate only by exit status.
+  process.exit(2);
+}
+NODE
+
+parse_item() {
+  local rc=0
+  # Discard even unexpected runtime diagnostics; only fixed categories reach the log.
+  node "$work_dir/parse-item.js" "$1" "$2" >>"$env_file" 2>/dev/null || rc=$?
+  case "$rc" in
+    0) return 0 ;;
+    2) echo "1Password item JSON/schema invalid" >>"$log_file" ;;
+    3) echo "1Password required field missing" >>"$log_file" ;;
+    *) echo "1Password item parser failed" >>"$log_file" ;;
+  esac
+  exit "$rc"
 }
 
 if [[ "$read_primary" == "1" ]]; then
   json_file="$work_dir/primary.json"
-  read_item "$item" "$account" "$vault" "${MAC_RELEASE_OP_USE_SERVICE_ACCOUNT:-0}" "$json_file"
-  MAC_RELEASE_OP_FIELDS="$fields" node - "$json_file" >>"$env_file" 2>>"$log_file" <<'NODE'
-const fs = require("fs");
-const path = process.argv[2];
-const item = JSON.parse(fs.readFileSync(path, "utf8"));
-const fields = process.env.MAC_RELEASE_OP_FIELDS.split(/\s+/).filter(Boolean);
-const values = new Map((item.fields || []).map((field) => [field.label || field.id, field.value || ""]));
-function quote(value) {
-  return `'${String(value).replaceAll("'", "'\\''")}'`;
-}
-for (const name of fields) {
-  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
-    throw new Error(`invalid env field name: ${name}`);
-  }
-  const value = values.get(name);
-  if (!value) {
-    throw new Error(`missing 1Password field: ${name}`);
-  }
-  process.stdout.write(`export ${name}=${quote(value)}\n`);
-  process.stderr.write(`${name}: len=${value.length} escapedNewline=${value.includes("\\n")} realNewline=${value.includes("\n")}\n`);
-}
-NODE
+  read_item "$item" "$account" "$vault" "${MAC_RELEASE_OP_USE_SERVICE_ACCOUNT:-0}" "$json_file" || exit $?
+  MAC_RELEASE_OP_FIELDS="$fields" parse_item "$json_file" primary
 fi
 
 if [[ "$read_codesign" == "1" ]]; then
   codesign_json_file="$work_dir/codesign.json"
-  read_item "$codesign_item" "$codesign_account" "$codesign_vault" "${MAC_RELEASE_CODESIGN_OP_USE_SERVICE_ACCOUNT:-0}" "$codesign_json_file"
+  read_item "$codesign_item" "$codesign_account" "$codesign_vault" "${MAC_RELEASE_CODESIGN_OP_USE_SERVICE_ACCOUNT:-0}" "$codesign_json_file" || exit $?
   MAC_RELEASE_CODESIGN_OP_PATH_FIELD="$codesign_path_field" \
     MAC_RELEASE_CODESIGN_OP_PASSWORD_FIELD="$codesign_password_field" \
     MAC_RELEASE_CODESIGN_PASSWORDLESS="$codesign_passwordless" \
-    node - "$codesign_json_file" >>"$env_file" 2>>"$log_file" <<'NODE'
-const fs = require("fs");
-const path = process.argv[2];
-const item = JSON.parse(fs.readFileSync(path, "utf8"));
-const values = new Map((item.fields || []).map((field) => [field.label || field.id, field.value || ""]));
-const pathField = process.env.MAC_RELEASE_CODESIGN_OP_PATH_FIELD;
-const passwordField = process.env.MAC_RELEASE_CODESIGN_OP_PASSWORD_FIELD;
-const passwordless = process.env.MAC_RELEASE_CODESIGN_PASSWORDLESS === "1";
-const keychainPath = values.get(pathField);
-const keychainPassword = values.get(passwordField);
-function quote(value) {
-  return `'${String(value).replaceAll("'", "'\\''")}'`;
-}
-if (!keychainPath) throw new Error(`missing 1Password field: ${pathField}`);
-if (!passwordless && !keychainPassword) throw new Error(`missing 1Password field: ${passwordField}`);
-process.stdout.write(`export MAC_RELEASE_CODESIGN_KEYCHAIN=${quote(keychainPath)}\n`);
-if (!passwordless) {
-  process.stdout.write(`MAC_RELEASE_CODESIGN_KEYCHAIN_PASSWORD=${quote(keychainPassword)}\n`);
-}
-process.stderr.write(`MAC_RELEASE_CODESIGN_KEYCHAIN: len=${keychainPath.length}\n`);
-if (!passwordless) {
-  process.stderr.write(`MAC_RELEASE_CODESIGN_KEYCHAIN_PASSWORD: len=${keychainPassword.length}\n`);
-}
-NODE
+    parse_item "$codesign_json_file" codesign
 fi
 
 if [[ "${MAC_RELEASE_OP_ENV_REFS_READ:-0}" == "1" && -n "${MAC_RELEASE_OP_ENV_REFS:-}" ]]; then
@@ -347,11 +360,9 @@ if [[ "${MAC_RELEASE_OP_ENV_REFS_READ:-0}" == "1" && -n "${MAC_RELEASE_OP_ENV_RE
     [[ -n "${env_ref_entry// /}" ]] || continue
     env_ref_name=${env_ref_entry%%=*}
     env_ref_uri=${env_ref_entry#*=}
-    env_ref_value=$(run_op "${MAC_RELEASE_OP_USE_SERVICE_ACCOUNT:-0}" "$account" read "$env_ref_uri" 2>>"$log_file") ||
-      { echo "op read failed for $env_ref_name" >&2; exit 1; }
-    [[ -n "$env_ref_value" ]] || { echo "empty 1Password value for $env_ref_name" >&2; exit 1; }
+    env_ref_value=$(run_op "${MAC_RELEASE_OP_USE_SERVICE_ACCOUNT:-0}" "$account" read "$env_ref_uri") || exit $?
+    [[ -n "$env_ref_value" ]] || { echo "1Password required field missing" >>"$log_file"; exit 1; }
     printf "export %s='%s'\n" "$env_ref_name" "${env_ref_value//\'/\'\\\'\'}" >>"$env_file"
-    echo "$env_ref_name: len=${#env_ref_value}" >&2
   done 3< <(tr ';' '\n' <<<"${MAC_RELEASE_OP_ENV_REFS}")
 fi
 
@@ -360,11 +371,8 @@ if [[ "$read_sparkle" == "1" ]]; then
   [[ -n "$sparkle_key_file" ]] || { echo "missing Sparkle temp-key path" >&2; exit 1; }
   sparkle_value=$(run_op \
     "${MAC_RELEASE_SPARKLE_OP_USE_SERVICE_ACCOUNT-${MAC_RELEASE_OP_USE_SERVICE_ACCOUNT:-0}}" \
-    "$sparkle_account" read "$sparkle_ref" 2>>"$log_file") || {
-    echo "Sparkle key read failed" >&2
-    exit 1
-  }
-  [[ -n "$sparkle_value" ]] || { echo "empty Sparkle private key" >&2; exit 1; }
+    "$sparkle_account" read "$sparkle_ref") || exit $?
+  [[ -n "$sparkle_value" ]] || { echo "1Password required field missing" >>"$log_file"; exit 1; }
   (umask 077; printf '%s\n' "$sparkle_value" >"$sparkle_key_file")
   chmod 600 "$sparkle_key_file"
   unset sparkle_value
@@ -373,7 +381,7 @@ if [[ "$read_sparkle" == "1" ]]; then
 fi
 
 chmod 600 "$env_file"
-echo "1Password fields exported: $(wc -l <"$env_file" | tr -d ' ')"
+echo "1Password fields exported"
 SCRIPT
   chmod 700 "$script"
 

@@ -2,6 +2,10 @@
 # shellcheck disable=SC1091,SC2030,SC2031
 set -euo pipefail
 
+if [[ "${1:-}" != --isolated ]]; then
+  exec /usr/bin/env -i PATH="$PATH" /bin/bash "$0" --isolated
+fi
+shift
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 test_root="$(mktemp -d /tmp/mac-release-test.XXXXXX)"
 trap 'rm -rf "$test_root"' EXIT
@@ -37,7 +41,8 @@ case " $* " in
     runner_path=${runner_path%%;*}
     [[ -f "$runner_path" ]]
     work_dir=${runner_path%/*}
-    if grep -Fq "${MAC_RELEASE_TEST_TOKEN:?}" "$command_text" "$runner_path" "$work_dir/read-op.sh"; then
+    if [[ "$command_text" == *"${MAC_RELEASE_TEST_TOKEN:?}"* ]] ||
+      grep -Fq "$MAC_RELEASE_TEST_TOKEN" "$runner_path" "$work_dir/read-op.sh"; then
       echo "service-account token appeared in tmux command or generated script" >&2
       exit 1
     fi
@@ -151,6 +156,27 @@ key_file=$2
 [[ "$(<"$key_file")" == "${MAC_RELEASE_TEST_SPARKLE_KEY:?}" ]]
 SIGN_UPDATE
 chmod +x "$test_root/bin/sign_update"
+
+# File-based Sparkle validation checks generate_keys availability but must never use it.
+for tool in generate_keys security codesign curl gh; do
+  cat >"$test_root/bin/$tool" <<'DENY'
+#!/usr/bin/env bash
+echo 'unexpected external tool call in synthetic release test' >&2
+exit 94
+DENY
+  chmod +x "$test_root/bin/$tool"
+done
+
+# Model the library's BSD permission query on Ubuntu too.
+cat >"$test_root/bin/stat" <<'STAT'
+#!/usr/bin/env bash
+set -euo pipefail
+[[ "$1 $2" == '-f %Lp' ]]
+exec node -e 'process.stdout.write((require("fs").statSync(process.argv[1]).mode & 0o777).toString(8) + "\n")' "$3"
+STAT
+chmod +x "$test_root/bin/stat"
+export PATH="$test_root/bin:$PATH"
+export CLAWDBOT_TMUX_SOCKET_DIR="$test_root/sockets"
 
 # shellcheck source=lib/mac_release.sh
 source "$script_dir/lib/mac_release.sh"
