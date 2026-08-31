@@ -86,6 +86,7 @@ Common optional:
 - Prefer already-exported env vars first; no `op` call if all `MAC_RELEASE_OP_FIELDS` are present.
 - If fields are missing, read configured package and codesign items in one tmux command for the whole release.
 - Provider stderr and parser exceptions are discarded; failed reads stop with fixed provider-read, JSON/schema, missing-field, or parser-failure diagnostics, without values or field labels.
+- Direct env-reference handoffs use Bash `%q` to preserve captured values safely on Bash 3.2; command substitution still strips terminal newlines from `op read` output.
 - Resolve `MAC_RELEASE_SPARKLE_OP_REF` without exposing the private key in the generated environment file or logs;
   only the temporary file path crosses the helper boundary.
 - Use service-account mode only with an explicit vault or `MAC_RELEASE_OP_USE_SERVICE_ACCOUNT=1`.

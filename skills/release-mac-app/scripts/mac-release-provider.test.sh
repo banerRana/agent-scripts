@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Synthetic only. Optional arguments: library-under-test, artifact parent directory.
+# Synthetic only. Optional arguments: [--direct-refs-only] library-under-test, artifact parent directory.
 set -euo pipefail
 
 if [[ "${1:-}" != --isolated ]]; then
@@ -7,6 +7,11 @@ if [[ "${1:-}" != --isolated ]]; then
     /bin/bash "$0" --isolated "$@"
 fi
 shift
+direct_refs_only=0
+if [[ "${1:-}" == --direct-refs-only ]]; then
+  direct_refs_only=1
+  shift
+fi
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 library=${1:-$script_dir/lib/mac_release.sh}
 test_root=$(mktemp -d "${2:-/tmp}/mac-release-provider-test.XXXXXX")
@@ -90,6 +95,11 @@ case "$1" in
     cp "$work_dir/status" "$MAC_RELEASE_TEST_CASE/producer-status"
     if [[ "$(cat "$work_dir/status")" == 0 ]]; then
       [[ "$(stat -f '%Lp' "$work_dir/secrets.env")" == 600 ]]
+      if [[ "$MAC_RELEASE_TEST_FAULT" == ref-* ]]; then
+        syntax_rc=0
+        /bin/bash -n "$work_dir/secrets.env" >/dev/null 2>&1 || syntax_rc=$?
+        printf '%s\n' "$syntax_rc" >"$MAC_RELEASE_TEST_CASE/handoff-syntax-status"
+      fi
     fi
     # A source sentinel proves a failed pass never consumes even a partial handoff.
     printf '%s\n' 'printf sourced >"$MAC_RELEASE_TEST_CASE/env-sourced"' >>"$work_dir/secrets.env"
@@ -164,6 +174,24 @@ for (const stage of ["primary", "codesign"]) {
 for (const stage of ["env", "sparkle"]) {
   fs.writeFileSync(`${dir}/${stage}.value`, stage === target && fault === "missing" ? "" : "reference-value");
 }
+if (fault.startsWith("ref-")) {
+  const shell = '$(printf executed >"$MAC_RELEASE_TEST_CASE/shell-executed") ' +
+    '`printf executed >"$MAC_RELEASE_TEST_CASE/shell-executed"` ; "double quotes" \\ * ? [glob] # %\t';
+  // No terminal LF: these assertions cover the captured value, after command substitution.
+  const refs = {
+    "ref-apostrophe-single": `${marker}'value`,
+    "ref-apostrophe-repeated": `${marker}''value'''end`,
+    "ref-apostrophe-leading": `'${marker}`,
+    "ref-apostrophe-trailing": `${marker}'`,
+    "ref-literal-backslash-n": `${marker}\\n\\nend`,
+    "ref-newline-embedded": `${marker}\nend`,
+    "ref-newline-leading": `\n\n${marker}\nend`,
+    "ref-newline-consecutive": `${marker}\n\n\nend`,
+    "ref-shell-metacharacters": `${marker} ${shell}`,
+    "ref-combined": `\n'${marker}'' \\n\n\n${shell} end'`,
+  };
+  fs.writeFileSync(`${dir}/env.value`, refs[fault]);
+}
 FIXTURES
 
 cat >"$test_root/load.sh" <<'LOAD'
@@ -190,7 +218,12 @@ trap mac_release_cleanup_temp_sparkle_key EXIT
 mac_release_load_1password_env
 expected=$(cat "$MAC_RELEASE_TEST_CASE/expected")
 [[ "$TEST_SECRET" == "$expected" && "$ID_SECRET" == "$expected" ]]
-[[ "$EXTRA_SECRET" == reference-value ]]
+if [[ "$MAC_RELEASE_TEST_FAULT" == ref-* ]]; then
+  printf '%s' "$EXTRA_SECRET" >"$MAC_RELEASE_TEST_CASE/env-parent.actual"
+  /bin/bash -c 'printf %s "$EXTRA_SECRET"' >"$MAC_RELEASE_TEST_CASE/env-child.actual"
+else
+  [[ "$EXTRA_SECRET" == reference-value ]]
+fi
 [[ "$MAC_RELEASE_CODESIGN_KEYCHAIN" == "$expected" ]]
 [[ "$MAC_RELEASE_CODESIGN_KEYCHAIN_PASSWORD" == "$expected" ]]
 [[ "$(cat "$SPARKLE_PRIVATE_KEY_FILE")" == reference-value ]]
@@ -243,6 +276,12 @@ run_case() {
   check 'producer stopped before temp-file removal' test -f "$case_dir/cleanup-order"
   check 'private handoffs' test -f "$case_dir/permissions"
   check 'no forbidden tools' test ! -e "$case_dir/forbidden"
+  if [[ "$fault" == ref-* ]]; then
+    check 'generated handoff has valid Bash syntax' test "$(cat "$case_dir/handoff-syntax-status")" = 0
+    check 'direct reference preserved byte-for-byte in parent' cmp -s "$case_dir/env.value" "$case_dir/env-parent.actual"
+    check 'direct reference exported byte-for-byte to child' cmp -s "$case_dir/env.value" "$case_dir/env-child.actual"
+    check 'shell constructs not executed' test ! -e "$case_dir/shell-executed"
+  fi
   for artifact in wrapper.stdout wrapper.stderr replay.log pane.stdout pane.stderr pane-command; do
     check "diagnostic artifact exists: $artifact" test -f "$case_dir/$artifact"
     if grep -Fq -f "$case_dir/marker" "$case_dir/$artifact"; then
@@ -255,6 +294,18 @@ run_case() {
   done <"$case_dir/temp-paths"
   [[ "$before" != "$failures" ]] || printf 'PASS %s/%s\n' "$target" "$fault"
 }
+
+for fault in ref-apostrophe-single ref-apostrophe-repeated ref-apostrophe-leading ref-apostrophe-trailing \
+  ref-literal-backslash-n ref-newline-embedded ref-newline-leading ref-newline-consecutive \
+  ref-shell-metacharacters ref-combined; do
+  run_case env "$fault" 0
+done
+if [[ "$direct_refs_only" == 1 ]]; then
+  printf 'Direct-reference regression artifacts: %s\n' "$test_root"
+  printf 'Failed assertions: %s\n' "$failures"
+  [[ "$failures" == 0 ]]
+  exit
+fi
 
 run_case primary success 0
 for target in primary codesign; do

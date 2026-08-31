@@ -362,7 +362,8 @@ if [[ "${MAC_RELEASE_OP_ENV_REFS_READ:-0}" == "1" && -n "${MAC_RELEASE_OP_ENV_RE
     env_ref_uri=${env_ref_entry#*=}
     env_ref_value=$(run_op "${MAC_RELEASE_OP_USE_SERVICE_ACCOUNT:-0}" "$account" read "$env_ref_uri") || exit $?
     [[ -n "$env_ref_value" ]] || { echo "1Password required field missing" >>"$log_file"; exit 1; }
-    printf "export %s='%s'\n" "$env_ref_name" "${env_ref_value//\'/\'\\\'\'}" >>"$env_file"
+    # Quote the captured value as one Bash word, including on Bash 3.2.
+    printf 'export %s=%q\n' "$env_ref_name" "$env_ref_value" >>"$env_file"
   done 3< <(tr ';' '\n' <<<"${MAC_RELEASE_OP_ENV_REFS}")
 fi
 
