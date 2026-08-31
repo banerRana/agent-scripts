@@ -15,12 +15,12 @@
 - Workspace: `~/Projects`. Missing steipete repo: clone `https://github.com/steipete/<repo>.git`. Other OSS: `~/Projects/oss`.
 - `../agent-skills` = canonical public OpenClaw skills, `https://github.com/openclaw/agent-skills`; never `steipete/agent-skills`.
 - "Make a note" here = terse `AGENTS.MD` edit. No separate `CLAUDE.md`.
-- `ship` = changelog, grouped commits, push, pull. "Shipped" = pushed to GitHub.
+- `ship` = grouped commits, push, pull. "Shipped" = pushed to GitHub; changelog work belongs to release time only.
 - Version/artifact publication needs explicit `release`/`publish` ask. Release = GitHub Release; npm publish when applicable. Tag/push alone != released.
-- Verified release done: bump changelog to next patch `Unreleased`; commit.
+- Verified release done: verify the finalized changelog matches the published release; do not prefill the next release.
 - Release verify: docs/notes contain current changelog. Missing/stale: fix before closeout.
 - npm release verify: `npm view <pkg>@<version>` proves version, dist-tag, tarball, integrity, publish time. GitHub tag + Release exist. Release body links npm version page, registry tarball, integrity, CI/proof.
-- Changelog: match house style; one-line bullet preferred. No prose-length hard-wrap.
+- Changelogs are generated or edited only at release time, never in advance for PRs, fixes, merges, or `ship`. Keep release-note context in PR bodies or commits until then. At release, match house style; prefer one-line bullets without prose-length hard-wrap.
 - Skills own tool workflows. This file: hard rules only.
 - Agent transcripts: omit by default and never ask, even if repo/skill guidance offers one; include only on explicit request.
 - Private agent chat + authenticated org-approved systems = internal. Use task-needed non-public names, links, systems, processes, people. Answering authorized user != public disclosure.
@@ -55,7 +55,7 @@
 - Opportunistic cleanup: include high-confidence flaky-test fixes and bounded nearby refactors/cleanup found during PR work; keep changes coherent and prove behavior.
 - Fix/refactor: delete old path by default. Compat needs named contract: public API/CLI/config/data, tagged upgrade, security boundary, or observed prod state. Unsure: ask before alias/shim/fallback. Tests alone != contract.
 - Use repo package manager/runtime. Swap needs approval.
-- Docs: read repo docs before code. User-visible behavior change: update docs/changelog.
+- Docs: read repo docs before code. User-visible behavior change: update relevant docs and record release-note context in the PR or commit; do not edit changelogs before release time.
 - Inline comment: brief; only tricky, bug-prone, or formerly buggy logic.
 - New dependency: quick health check—recent release, commits, adoption.
 
@@ -78,11 +78,11 @@
 - Before every commit/land: `$autoreview` until no accepted/actionable finding. Always prefer Codex for autoreview, independent of environment.
 - Routine `$autoreview` is pre-approved, including sending task-scoped unpublished diffs to the configured authenticated Codex review service; never ask Peter for autoreview approval. Preserve secret redaction, unrelated-data disclosure boundaries, and managed sandbox/reviewer enforcement.
 - Issue fixed on `main` with proof: comment proof + commit/PR; close.
-- User-facing fix/landed PR: changelog unless test/internal only.
-- Contributor PR author: no changelog edit. Maintainer/AI adds on merge and thanks contributor.
+- User-facing fix/landed PR: preserve behavior, surface, refs, and contributor credit in the PR body or squash message for release-note generation.
+- Contributors, maintainers, and agents do not edit changelogs for normal PRs or at merge; release generation adds entries and thanks contributors.
 - Explicit land/ship authorizes needed branch changes and push. After land: checkout `main`; `git pull --ff-only`; verify `git status -sb`; then final.
 - After PR merge/ship: always give a real narrative recap, normally 2-5 short paragraphs. Explain the original problem, the root cause, what changed and why, the important architecture or ownership boundary, and the proof run. Include notable CI failures or retries, exact PR/issue/merge state, and worthwhile follow-ups. Do not reduce a successful landing to a terse checklist, bare SHAs, or git directives; the recap is the primary handoff.
-- Preserve contributor credit: commit body `Co-authored-by: Name <email>` from PR commit author. Changelog still thanks `@login` for user-visible work.
+- Preserve contributor credit: commit body `Co-authored-by: Name <email>` from PR commit author. At release time, the changelog thanks `@login` for user-visible work.
 
 ## Runtime Safety
 
