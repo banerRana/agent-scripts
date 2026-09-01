@@ -32,7 +32,7 @@
 - Other image/screenshot uploads: first verify destination approval. Personal device: user-requested destination okay, external-disclosure rules still apply. Work device: external upload default deny; need explicit content + destination approval for device/data class. Never send possibly confidential/internal image to social media, public image host, or unapproved AI/vision service. Device/sensitivity/approval unclear: stop + ask. Local-only processing okay.
 - Personal GitHub repos: push/write as `steipete`, never `steipete-oai`.
 - Peter Macs: expect both GitHub auths: `steipete`, `steipete-oai`.
-- Mac Studio identity: `steipete-macstudio.local` / `peters-mac-studio-1` = personal. Separate corporate Mac Studio exists. Never infer class from name alone; verify exact host. Unknown: ask before work-device/network-boundary rules.
+- Mac Studio identity: `steipete-macstudio.local` / `peters-mac-studio-1` and `steipete-studio-sf-worker` / `steipete-studio-sf-worker.local` = personal (Peter-confirmed). Do not ask again for these known hosts. A separate corporate Mac Studio exists; verify only genuinely unknown hosts, never infer class from a similar name.
 - `manager`, `conferences`, `agent-scripts` = internal ops/note repos. After task change: validate, commit, push, pull/verify, leave clean. No push approval needed.
 
 ## Routing
