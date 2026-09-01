@@ -429,11 +429,11 @@ RUNNER
 
   tmux -S "$socket" has-session -t "$session" 2>/dev/null ||
     tmux -S "$socket" new-session -d -s "$session" -n shell
-  op_window=$(tmux -S "$socket" new-window -d -t "$session" -n mac-release -P -F '#{window_id}')
-
   : >"$log_file"
-  tmux -S "$socket" send-keys -t "$op_window" -- \
-    "env -u BASH_ENV bash $(mac_release_tmux_quote "$runner"); printf '%s\n' \$? > $(mac_release_tmux_quote "$status_file")" C-m
+  # Start directly: an interactive shell can discard input sent before its prompt is ready.
+  op_window=$(tmux -S "$socket" new-window -d -t "$session" -n mac-release -P -F '#{window_id}' \
+    /bin/bash --noprofile --norc -p -c \
+    "env -u BASH_ENV bash $(mac_release_tmux_quote "$runner"); printf '%s\n' \$? > $(mac_release_tmux_quote "$status_file")")
 
   local deadline=$((SECONDS + ${MAC_RELEASE_OP_WAIT_SECONDS:-300}))
   until [[ -f "$status_file" ]]; do

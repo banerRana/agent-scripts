@@ -24,13 +24,16 @@ case " $* " in
     echo "unexpected new tmux session" >&2
     exit 1
     ;;
-  *" new-window "*) printf '@7\n' ;;
   *" display-message "*) printf '999999\n' ;;
   *" send-keys "*)
+    echo "credential dispatch must not depend on interactive shell input" >&2
+    exit 1
+    ;;
+  *" new-window "*)
     command_text=
     previous=
     for arg in "$@"; do
-      if [[ "$previous" == "--" ]]; then
+      if [[ "$previous" == "-c" ]]; then
         command_text=$arg
         break
       fi
@@ -63,6 +66,7 @@ case " $* " in
       eval "sparkle_path=$sparkle_path_line"
       [[ -z "$sparkle_path" ]] || printf '%s\n' "$sparkle_path" >"$MAC_RELEASE_TEST_ROOT/last-sparkle-path"
     fi
+    printf '@7\n'
     ;;
   *" kill-window "*)
     if [[ -f "$MAC_RELEASE_TEST_ROOT/last-sparkle-path" ]]; then

@@ -73,12 +73,8 @@ printf '%s\n' "$1" >>"$MAC_RELEASE_TEST_CASE/tmux-calls"
 case "$1" in
   has-session) [[ "$2 $3" == '-t op-work' ]] ;;
   new-window)
-    [[ "$*" == 'new-window -d -t op-work -n mac-release -P -F #{window_id}' ]]
-    printf '@7\n'
-    ;;
-  send-keys)
-    [[ "$2 $3 $4" == '-t @7 --' ]]
-    command_text=$5
+    [[ "$*" == 'new-window -d -t op-work -n mac-release -P -F #{window_id} /bin/bash --noprofile --norc -p -c '* ]]
+    command_text=${!#}
     runner_path=${command_text#* bash }
     runner_path=${runner_path%%;*}
     work_dir=${runner_path%/*}
@@ -104,7 +100,9 @@ case "$1" in
     # A source sentinel proves a failed pass never consumes even a partial handoff.
     printf '%s\n' 'printf sourced >"$MAC_RELEASE_TEST_CASE/env-sourced"' >>"$work_dir/secrets.env"
     printf 'private-handoffs-ok\n' >"$MAC_RELEASE_TEST_CASE/permissions"
+    printf '@7\n'
     ;;
+  send-keys) exit 93 ;;
   display-message) [[ "$*" == 'display-message -p -t @7 #{pane_pid}' ]] ;;
   kill-window)
     [[ "$*" == 'kill-window -t @7' ]]
@@ -271,7 +269,7 @@ run_case() {
   check 'no retry or fallback' test "$(wc -l <"$case_dir/reads" | tr -d ' ')" = "$count"
   head -n "$count" <<< $'primary\ncodesign\nenv\nsparkle' >"$case_dir/expected-reads"
   check 'read order preserved' cmp -s "$case_dir/expected-reads" "$case_dir/reads"
-  printf '%s\n' has-session new-window send-keys display-message kill-window >"$case_dir/expected-tmux"
+  printf '%s\n' has-session new-window display-message kill-window >"$case_dir/expected-tmux"
   check 'shared session and task-window cleanup' cmp -s "$case_dir/expected-tmux" "$case_dir/tmux-calls"
   check 'producer stopped before temp-file removal' test -f "$case_dir/cleanup-order"
   check 'private handoffs' test -f "$case_dir/permissions"
