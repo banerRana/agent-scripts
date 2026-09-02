@@ -6,6 +6,7 @@ summary: Timeline of guardrail helper changes mirrored from Sweetistics and rela
 
 ## Unreleased
 
+- Scoped release-time-only changelog generation to `openclaw/openclaw`; restored changelog updates at landing and post-release `Unreleased` sections for every other repository.
 - Fixed Bash 3.2 escaping of captured macOS release direct-reference values in the private environment handoff.
 - Prevented macOS release credential diagnostics from replaying provider stderr or secret-bearing JSON/parser errors; added synthetic regression coverage.
 - Fixed skill sync nesting links inside locally owned directories; added bounded allowlisted self-link repair and read-only audit detection.
