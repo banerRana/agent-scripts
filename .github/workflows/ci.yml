@@ -42,6 +42,13 @@ jobs:
       - name: Test ClawSweeper status helper
         run: skills/clawsweeper-status/scripts/clawsweeper-status.test.sh
 
+      - name: Test npm helpers (offline, synthetic)
+        run: |
+          test_home="$(mktemp -d)"
+          trap 'rm -rf "$test_home"' EXIT
+          timeout 60s env -i HOME="$test_home" PATH="$PATH" node --test skills/npm/scripts/*.test.mjs </dev/null
+          timeout 30s env -i HOME="$test_home" PATH="$PATH" /bin/bash skills/npm/scripts/npm-auth.test.sh </dev/null
+
       - name: Test macOS release credential boundaries (synthetic)
         run: |
           /bin/bash skills/release-mac-app/scripts/mac-release.test.sh
