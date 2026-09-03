@@ -107,6 +107,7 @@
 - Destructive Git ops need explicit user request: `reset --hard`, `clean`, `restore`.
 - Task-scoped file deletion allowed. Never delete/overwrite unknown or unrelated user data.
 - Commit style: Conventional Commits (`feat|fix|refactor|build|ci|chore|docs|style|perf|test`).
+- Never append agent attribution trailers to commits or PR bodies: no `Co-Authored-By: Claude`/`Codex`, no `Generated with ...` footer. Human `Co-authored-by:` credit for real contributors stays.
 - No repo-wide search/replace scripts. Small reviewable edits.
 - No amend unless asked.
 - Unknown changes = other agent. Continue, touching own scope. Conflict/problem: stop + ask.
