@@ -180,12 +180,42 @@ working around it every invocation — the next task will hit the same wall.
 For follow-up fixes, resume from the repo directory with the same model, reasoning, and Fast-service overrides:
 
 ```bash
-(cd <repo> && command codex exec resume --last \
+(cd <repo> && command codex exec resume <session-id> \
   --dangerously-bypass-approvals-and-sandbox \
   -m gpt-6-astra -c 'model_reasoning_effort="high"' \
   --enable fast_mode -c 'service_tier="fast"' \
   -o /tmp/codex-last.md - <"$P2" 2>/dev/null)
 ```
+
+### How resume works (verified on codex-cli 0.153.4)
+
+`codex exec resume` is a different subcommand with a different flag set than
+`codex exec`; the fresh-launch flags do not all carry over.
+
+- **No `-C`.** `resume` has no directory flag; the working directory *is* the
+  repo selector. Always wrap it in `(cd <repo> && …)`. Passing `-C` fails with
+  `error: unexpected argument '-C' found` — and because the launcher line usually
+  ends in `echo "exit=$?"` or a log redirect, the harness chip can still report
+  exit 0. After every resume, check the log tail for `Usage: codex exec resume`
+  before trusting the completion notification; if it is there, nothing ran.
+- **No `--yolo`.** Use `--dangerously-bypass-approvals-and-sandbox` (accepted on
+  resume). `--skip-git-repo-check`, `-m`, `-c`, `--enable`, `-o`, `--json`,
+  `--output-schema`, `--ephemeral` are accepted; `--full-auto` and `-C` are not.
+- **Session selection.** Positional `[SESSION_ID]` takes a UUID (from the
+  `session id:` line in the fresh run's log) or a thread name. `--last` picks the
+  newest session recorded *for this cwd* (cwd-filtered; `--all` disables the
+  filter). With parallel workers on the machine, always pass the explicit UUID.
+- **Prompt.** Positional `[PROMPT]`, or `-` to read it from stdin; keep using
+  the temp-file pattern (`- <"$P2"`). The resumed worker keeps its full prior
+  context, so the follow-up prompt should state only the delta: the decision,
+  the amended constraint, what still stands, and the required report.
+- **Overrides are per launch.** Model, reasoning effort, service tier, and
+  `-o` are not remembered; re-pass all of them. The recorded provider and
+  sandbox policy are inherited from the original session.
+- **Escape-hatch stops resume cleanly.** A worker that stopped under a spec's
+  escape hatch is not saturated; resuming it with the coordinator's decision is
+  the intended flow and cheaper than a fresh order. Only start a fresh session
+  for a genuinely new work order.
 
 ## Liveness watchdog (long monitored runs)
 
