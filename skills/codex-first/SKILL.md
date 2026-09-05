@@ -212,6 +212,13 @@ For follow-up fixes, resume from the repo directory with the same model, reasoni
 - **Overrides are per launch.** Model, reasoning effort, service tier, and
   `-o` are not remembered; re-pass all of them. The recorded provider and
   sandbox policy are inherited from the original session.
+- **Resume can be refused for a long thread.** `Error: thread/resume: thread/resume
+  failed: list_turns is not supported yet (code -32601)` means the backend cannot
+  rehydrate that session (seen after ~400k tokens of tool output). The command
+  exits non-zero after printing the *previous* run's final message, so it looks
+  like a no-op. Do not retry; relaunch as a fresh `codex exec` with a
+  self-contained order (state the branch/PR/worktree explicitly, since the new
+  session has no memory of them).
 - **Escape-hatch stops resume cleanly.** A worker that stopped under a spec's
   escape hatch is not saturated; resuming it with the coordinator's decision is
   the intended flow and cheaper than a fresh order. Only start a fresh session
