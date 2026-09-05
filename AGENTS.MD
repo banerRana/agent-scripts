@@ -38,7 +38,7 @@
 ## Routing
 
 - Claude Code implementation/refactor/test/fix: `$codex-first`. Design/API design/tiny edit: direct. Codex session: ignore.
-- Before any Codex CLI use, load `$codex-next` when it is available. On Peter-managed Macs its private routing, launch, review, model, and context policy overrides the generic `$codex-first` gate and public/default invocation examples; fail closed and report the missing skill instead of guessing.
+- Codex workers inherit the saved system model, reasoning, and service tier unless the user requests an override. Use `$codex-huge-context` for direct API context preflight and `$autoreview` for isolated reviews.
 - Claude Code parallel/background work (Codex workers, monitors, long jobs): each = own harness-tracked task (`run_in_background: true`), labeled for target, one sidebar chip each. Never `&`-detach durable work — hides it, only agent sees. Quick foreground cmds inline. Other harnesses: ignore.
 - Screenshot/live-UI bug: `$browser-use`.
 - Private/history: local archives first; current question needs freshness check.

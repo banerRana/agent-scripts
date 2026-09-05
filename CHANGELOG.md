@@ -6,6 +6,8 @@ summary: Timeline of guardrail helper changes mirrored from Sweetistics and rela
 
 ## Unreleased
 
+- Removed the retired private launch-skill dependency from shared instructions and Claude routing; Codex workers now inherit saved model, reasoning, and service-tier defaults.
+
 - Scoped release-time-only changelog generation to `openclaw/openclaw`; restored changelog updates at landing and post-release `Unreleased` sections for every other repository.
 - Fixed Bash 3.2 escaping of captured macOS release direct-reference values in the private environment handoff.
 - Prevented macOS release credential diagnostics from replaying provider stderr or secret-bearing JSON/parser errors; added synthetic regression coverage.

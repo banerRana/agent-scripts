@@ -1,6 +1,6 @@
 ---
 name: codex-first
-description: "Claude Code work routing: delegate implementation, fixing, exploratory subagents, rebasing, and PR merging/landing to Codex CLI while the parent specifies, decides, reviews, and verifies. Load a private codex-next policy first when available; otherwise use the native-Claude model gate. Codex-backed autoreview is always allowed and preferred."
+description: "Claude Code work routing: delegate implementation, fixing, exploratory subagents, rebasing, and PR merging/landing to Codex CLI while the parent specifies, decides, reviews, and verifies. Apply the native-Claude model gate and inherit saved Codex defaults. Codex-backed autoreview is always allowed and preferred."
 ---
 
 # Codex First
@@ -13,13 +13,7 @@ not hands-on self-delegation. Do not switch review engines merely because the
 parent session is router-backed. This exception takes precedence over the gate
 below.
 
-**Private runtime override:** invoke `$codex-next` before evaluating this gate
-when that skill is available. On Peter-managed Macs it may replace the generic
-model-family gate for both coding and exploratory/subagent work. Follow its
-resolved current-model decision; do not continue through the generic gate after
-it has selected an execution surface.
-
-For direct hands-on delegation without a private override, use this skill only
+For direct hands-on delegation, use this skill only
 when the active agent is Claude Code **and** the session is running on a native
 Claude model.
 
@@ -97,9 +91,9 @@ Portfolio/multi-repo work: `$maintainer-orchestrator` instead.
 
 ## Invoke
 
-Before every Codex CLI call, invoke `$codex-next` when that private skill is available. Its machine-specific launch, review, model, and context policy overrides the generic examples below. On a Peter-managed Mac, fail closed and report a missing `codex-next` skill instead of guessing or silently falling back.
+Use the saved Codex model, reasoning, and service tier unless the user requests an override. Keep worker execution policy and specialized review isolation with their owning workflows.
 
-If `codex-next` selects the `openai_api_direct` million-token route, run `ruby ~/.codex/skills/agent-scripts/codex-huge-context/scripts/preflight.rb` before the first fresh or resumed launch in the batch. Fail closed if it cannot deliver the Keychain credential; never work around it by overriding the provider or using ordinary Codex authentication.
+If the saved configuration selects the `openai_api_direct` million-token route, run `ruby ~/.codex/skills/agent-scripts/codex-huge-context/scripts/preflight.rb` before the first fresh or resumed launch in the batch. Fail closed if it cannot deliver the Keychain credential; never work around it by overriding the provider or using ordinary Codex authentication.
 
 Prompt via temp file, never inline quoting:
 
@@ -108,13 +102,10 @@ P=$(mktemp); cat >"$P" <<'EOF'
 <goal, repo + key paths, constraints ("don't touch X"), non-goals, proof expected, output shape>
 EOF
 command codex exec --yolo -C <repo> \
-  -m gpt-5.6-sol \
-  -c model_reasoning_effort="high" \
-  --enable fast_mode \
   -o /tmp/codex-last.md - <"$P" 2>/dev/null
 ```
 
-- Model default: `gpt-5.6-sol`, effort `high`, fast mode on — pin all three explicitly; don't rely on user config.
+- Fresh workers inherit saved defaults. Resumed sessions retain their launch configuration; use a fresh worker when adopting changed defaults.
 - `--yolo` is the house default; Codex may run commands/tests freely. Keep prompts scoped to the target repo.
 - If `--yolo` is unavailable—either the CLI rejects the flag or the selected model/backend rejects unrestricted execution—replace it with `--approve-for-me` and retry once. Never pass both. Preserve every other argument and constraint.
 - `command codex` bypasses any interactive shell alias. If codex isn't on PATH, it depends on how it was installed:
@@ -195,8 +186,7 @@ Follow-up fixes — cheaper than fresh runs, keeps context. `resume` has no `-C`
 For runs you must not babysit, trade the stderr suppression for a log and watch its mtime; read only the `-o` file into context, never the log body.
 
 ```bash
-command codex exec --yolo -C <repo> -m gpt-5.6-sol \
-  -c model_reasoning_effort="high" --enable fast_mode \
+command codex exec --yolo -C <repo> \
   -o "$OUT" - <"$P" > "$LOG" 2>&1
 # Claude Code: run the line above as its own Bash run_in_background call
 # (tracked chip + completion notification). Append `&` + a PID file ONLY in
