@@ -8,7 +8,7 @@ require "rbconfig"
 require "tmpdir"
 
 SCRIPT = File.expand_path("preflight.rb", __dir__)
-MODELS = %w[gpt-5.6-sol gpt-5.6-terra gpt-5.6-luna].freeze
+MODELS = %w[gpt-5.6-sol gpt-5.6-terra gpt-5.6-luna gpt-6-astra].freeze
 CONTEXT_WINDOW = 922_000
 AUTO_COMPACT_TOKEN_LIMIT = 700_000
 OUTPUT_SENTINEL = "fixture-output-must-not-appear"
@@ -45,7 +45,7 @@ def write_fixture(
   )
 
   root_values = {
-    "model" => '"gpt-5.6-sol"',
+    "model" => '"gpt-6-astra"',
     "model_provider" => '"openai_api_direct"',
     "model_context_window" => CONTEXT_WINDOW,
     "model_auto_compact_token_limit" => AUTO_COMPACT_TOKEN_LIMIT,
@@ -79,13 +79,19 @@ def run_preflight(config)
   Open3.capture3({ "GITHUB_PAT_TOKEN" => nil }, RbConfig.ruby, SCRIPT, "--config", config)
 end
 
-Dir.mktmpdir("codex-huge-context-test") do |root|
-  config = write_fixture(root, helper_body: "printf '%s\n' '#{OUTPUT_SENTINEL}'")
-  stdout, stderr, process_status = run_preflight(config)
-  assert(process_status.success?, "valid fixture failed: #{stderr}")
-  assert(stdout.include?("safe-context preflight: ok"), "success message missing")
-  assert(stderr.include?("GITHUB_PAT_TOKEN is unset"), "independent GitHub MCP warning missing")
-  assert(!"#{stdout}\n#{stderr}".include?(OUTPUT_SENTINEL), "credential leaked on successful preflight")
+MODELS.each do |model|
+  Dir.mktmpdir("codex-huge-context-test") do |root|
+    config = write_fixture(
+      root,
+      helper_body: "printf '%s\n' '#{OUTPUT_SENTINEL}'",
+      config_overrides: { "model" => model.inspect },
+    )
+    stdout, stderr, process_status = run_preflight(config)
+    assert(process_status.success?, "valid #{model} fixture failed: #{stderr}")
+    assert(stdout.include?("safe-context preflight: ok"), "success message missing")
+    assert(stderr.include?("GITHUB_PAT_TOKEN is unset"), "independent GitHub MCP warning missing")
+    assert(!"#{stdout}\n#{stderr}".include?(OUTPUT_SENTINEL), "credential leaked on successful preflight")
+  end
 end
 
 Dir.mktmpdir("codex-huge-context-test") do |root|
@@ -180,11 +186,17 @@ end
   end
 end
 
-Dir.mktmpdir("codex-huge-context-test") do |root|
-  config = write_fixture(root, helper_body: "printf '%s\n' '#{OUTPUT_SENTINEL}'", catalog_models: MODELS.take(2))
-  _stdout, stderr, process_status = run_preflight(config)
-  assert(!process_status.success?, "incomplete model catalogue unexpectedly passed")
-  assert(stderr.include?("model catalogue is missing gpt-5.6-luna"), "catalogue failure is unclear")
+%w[gpt-5.6-luna gpt-6-astra].each do |missing_model|
+  Dir.mktmpdir("codex-huge-context-test") do |root|
+    config = write_fixture(
+      root,
+      helper_body: "printf '%s\n' '#{OUTPUT_SENTINEL}'",
+      catalog_models: MODELS - [missing_model],
+    )
+    _stdout, stderr, process_status = run_preflight(config)
+    assert(!process_status.success?, "catalogue missing #{missing_model} unexpectedly passed")
+    assert(stderr.include?("model catalogue is missing #{missing_model}"), "catalogue failure is unclear")
+  end
 end
 
 puts "codex huge-context preflight tests passed"
