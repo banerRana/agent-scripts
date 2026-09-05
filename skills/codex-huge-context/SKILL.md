@@ -57,7 +57,7 @@ Long-context requests above 272,000 input tokens use the provider's higher long-
 
 Leave `effective_context_window_percent` absent to use Codex's 95% default, or set it explicitly to the integer `95`. Null, floating-point, or other values are invalid.
 
-Start each catalogue entry from that model's genuine, complete Codex metadata and use a client satisfying its minimum version. Preserve instructions, tool capabilities, and every safety field, including required review behavior; override only the context and compaction fields above. Never invent Astra metadata or relabel a Sol entry as Astra. The API context contract above supports the direct-provider override; it does not expand ChatGPT entitlement or relax client safety requirements. The preflight validates context and credential delivery, not the provenance of the remaining catalogue metadata.
+Start from the complete native catalogue for the installed Codex release, including its reviewer models: a custom catalogue replaces the built-in catalogue rather than overlaying selected entries. Use every model's genuine metadata and a client satisfying its minimum version. Preserve instructions, tool capabilities, and every safety field, including required review behavior; override only the context and compaction fields above. Never invent Astra metadata or relabel a Sol entry as Astra. The API context contract above supports the direct-provider override; it does not expand ChatGPT entitlement or relax client safety requirements. The preflight validates context and credential delivery, not the provenance of the remaining catalogue metadata.
 
 The root section of `~/.codex/config.toml` needs:
 
