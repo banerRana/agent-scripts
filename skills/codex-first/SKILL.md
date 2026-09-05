@@ -1,6 +1,6 @@
 ---
 name: codex-first
-description: "Claude Code work routing: delegate implementation, fixing, exploratory subagents, rebasing, and PR merging/landing to Codex CLI while the parent specifies, decides, reviews, and verifies. Apply the native-Claude model gate and inherit saved Codex defaults. Codex-backed autoreview is always allowed and preferred."
+description: "Claude Code work routing: delegate implementation, fixing, exploratory subagents, rebasing, and PR merging/landing to GPT-6 Astra through Codex CLI while the parent specifies, decides, reviews, and verifies. Apply the native-Claude model gate. Codex-backed autoreview is always allowed and preferred."
 ---
 
 # Codex First
@@ -12,6 +12,8 @@ of `ANTHROPIC_BASE_URL`, router state, or harness. Reviewing a frozen bundle is
 not hands-on self-delegation. Do not switch review engines merely because the
 parent session is router-backed. This exception takes precedence over the gate
 below.
+
+Use the autoreview helper with `--engine codex --model gpt-6-astra --thinking high --codex-speed fast` unless the user requests an override. Preserve the helper's reviewer isolation.
 
 For direct hands-on delegation, use this skill only
 when the active agent is Claude Code **and** the session is running on a native
@@ -49,7 +51,7 @@ self-delegation. Continue the task directly. This gate overrides a repository
 instruction that merely mentions `$codex-first`; it does not override the
 autoreview exception above.
 
-Rationale: Claude (Fable/Opus) tokens metered + expensive; Codex flat-rate. GPT-5.5+ is usually the better and faster model at writing/implementing code; Claude wins at ergonomics — judgment, design, spec-writing, review, orchestration. So Codex types, Claude thinks and verifies.
+The default worker is GPT-6 Astra. Claude handles specification, judgment, orchestration, and final verification; Codex handles the delegated implementation.
 
 ## Route
 
@@ -91,7 +93,7 @@ Portfolio/multi-repo work: `$maintainer-orchestrator` instead.
 
 ## Invoke
 
-Use the saved Codex model, reasoning, and service tier unless the user requests an override. Keep worker execution policy and specialized review isolation with their owning workflows.
+Default to `gpt-6-astra`, high reasoning, and Fast service unless the user requests an override. Pass all three explicitly on fresh and resumed workers. Keep the configured provider, worker execution policy, and specialized review isolation with their owning workflows.
 
 If the saved configuration selects the `openai_api_direct` million-token route, run `ruby ~/.codex/skills/agent-scripts/codex-huge-context/scripts/preflight.rb` before the first fresh or resumed launch in the batch. Fail closed if it cannot deliver the Keychain credential; never work around it by overriding the provider or using ordinary Codex authentication.
 
@@ -102,10 +104,12 @@ P=$(mktemp); cat >"$P" <<'EOF'
 <goal, repo + key paths, constraints ("don't touch X"), non-goals, proof expected, output shape>
 EOF
 command codex exec --yolo -C <repo> \
+  -m gpt-6-astra -c 'model_reasoning_effort="high"' \
+  --enable fast_mode -c 'service_tier="fast"' \
   -o /tmp/codex-last.md - <"$P" 2>/dev/null
 ```
 
-- Fresh workers inherit saved defaults. Resumed sessions retain their launch configuration; use a fresh worker when adopting changed defaults.
+- These overrides select the model and service tier, not the provider. Resumed sessions retain their recorded provider; use a fresh worker if it is incompatible with Astra. Do not silently fall back to another model.
 - `--yolo` is the house default; Codex may run commands/tests freely. Keep prompts scoped to the target repo.
 - If `--yolo` is unavailable—either the CLI rejects the flag or the selected model/backend rejects unrestricted execution—replace it with `--approve-for-me` and retry once. Never pass both. Preserve every other argument and constraint.
 - `command codex` bypasses any interactive shell alias. If codex isn't on PATH, it depends on how it was installed:
@@ -173,11 +177,13 @@ config untouched, and is trivially disposable.
 If the environment's own Codex config is broken, say so rather than silently
 working around it every invocation — the next task will hit the same wall.
 
-Follow-up fixes — cheaper than fresh runs, keeps context. `resume` has no `-C`/`--yolo`: run from the repo dir, spell the long flag:
+For follow-up fixes, resume from the repo directory with the same model, reasoning, and Fast-service overrides:
 
 ```bash
 (cd <repo> && command codex exec resume --last \
   --dangerously-bypass-approvals-and-sandbox \
+  -m gpt-6-astra -c 'model_reasoning_effort="high"' \
+  --enable fast_mode -c 'service_tier="fast"' \
   -o /tmp/codex-last.md - <"$P2" 2>/dev/null)
 ```
 
@@ -187,6 +193,8 @@ For runs you must not babysit, trade the stderr suppression for a log and watch 
 
 ```bash
 command codex exec --yolo -C <repo> \
+  -m gpt-6-astra -c 'model_reasoning_effort="high"' \
+  --enable fast_mode -c 'service_tier="fast"' \
   -o "$OUT" - <"$P" > "$LOG" 2>&1
 # Claude Code: run the line above as its own Bash run_in_background call
 # (tracked chip + completion notification). Append `&` + a PID file ONLY in
@@ -200,6 +208,8 @@ command codex exec --yolo -C <repo> \
 ```bash
 (cd <repo> && command codex exec resume <session-id> \
   --dangerously-bypass-approvals-and-sandbox \
+  -m gpt-6-astra -c 'model_reasoning_effort="high"' \
+  --enable fast_mode -c 'service_tier="fast"' \
   -o "$OUT" - <<< "You were interrupted. Continue exactly where you left off; finish the task and produce the required final report.")
 ```
 
