@@ -6,6 +6,8 @@ summary: Timeline of guardrail helper changes mirrored from Sweetistics and rela
 
 ## Unreleased
 
+- Added vm-lab bootstrap diagnostics for empty Apple-VZ clone disks and pre-output Bash heredoc stalls, with immutable-source safeguards and invocation-local shell fallback.
+
 - Simplified requested agent transcripts and require scope trimming before previews or publication; helpers that rerender sessions cannot reuse approval of edited Markdown.
 
 - Set `codex-first` workers and Codex-backed reviews to GPT-6 Astra with high reasoning and Fast service, including fresh, resumed, and watchdog launches.
