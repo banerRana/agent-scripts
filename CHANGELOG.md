@@ -6,6 +6,8 @@ summary: Timeline of guardrail helper changes mirrored from Sweetistics and rela
 
 ## Unreleased
 
+- Align shared Codex routing rules with the canonical `codex-first` skill and its launch recipe instead of stale saved-defaults guidance; preserve the model gate and isolated review workflow.
+
 - Added vm-lab bootstrap diagnostics for empty Apple-VZ clone disks and pre-output Bash heredoc stalls, with immutable-source safeguards and invocation-local shell fallback.
 
 - Simplified requested agent transcripts and require scope trimming before previews or publication; helpers that rerender sessions cannot reuse approval of edited Markdown.

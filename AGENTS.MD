@@ -37,8 +37,8 @@
 
 ## Routing
 
-- Claude Code implementation/refactor/test/fix: `$codex-first`. Design/API design/tiny edit: direct. Codex session: ignore.
-- Codex workers inherit the saved system model, reasoning, and service tier unless the user requests an override. Use `$codex-huge-context` for direct API context preflight and `$autoreview` for isolated reviews.
+- Claude Code implementation/refactor/test/fix: `$codex-first`, canonical at `~/Projects/agent-scripts/skills/codex-first/SKILL.md`. Apply its native-Claude model gate. Design/API design/tiny edit: direct. Codex session: ignore.
+- Codex worker model, reasoning, and service tier follow the current `$codex-first` launch recipe unless the user requests an override. Use `$codex-huge-context` for direct API context preflight and `$autoreview` for isolated reviews; preserve its reviewer isolation.
 - Claude Code parallel/background work (Codex workers, monitors, long jobs): each = own harness-tracked task (`run_in_background: true`), labeled for target, one sidebar chip each. Never `&`-detach durable work — hides it, only agent sees. Quick foreground cmds inline. Other harnesses: ignore.
 - Screenshot/live-UI bug: `$browser-use`.
 - Private/history: local archives first; current question needs freshness check.
