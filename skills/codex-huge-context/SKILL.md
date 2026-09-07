@@ -95,8 +95,10 @@ set -euo pipefail
 exec /usr/bin/security find-generic-password \
   -a Codex \
   -s "Codex OpenAI inference API" \
-  -w
+  -w /Users/steipete/Library/Keychains/login.keychain-db
 ```
+
+Resolve and verify the host's actual Keychain path at installation time; the example is host-specific. Keep that absolute, non-secret path inside the external executable, not `$HOME`/`~`, a provider override, or non-empty `auth.args`. Managed autoreview replaces the client's HOME/USERPROFILE and XDG config/data/state/cache directories. Implicit Keychain selection can then return exit 44 (`SecKeychainSearchCopyNext` item not found) even though parent-session delivery succeeds. Repair the wrapper's Keychain selection—not the reviewer's HOME, filesystem grants, or credential access. Inspect an existing helper before changing it; it may already use explicit selection.
 
 Use `$one-password` before handling the API key. The canonical value is the `OPENAI_API_KEY` field in Molty's `AI API Key - OpenAI - OPENAI_API_KEY - Serviceable Access` item. Read it through the service-account workflow inside the shared `op-work` tmux session and store/update only the Keychain copy. Never print, copy over SSH, place in a profile, or write it to a temporary file.
 
@@ -111,6 +113,18 @@ ruby ~/.codex/skills/agent-scripts/codex-huge-context/scripts/preflight.rb
 Do not mark a rollout complete or launch Codex when this fails. With `requires_openai_auth = false`, a missing Keychain delivery copy cannot fall back to the normal Codex login: the direct provider can reach `api.openai.com/v1/responses` without a bearer header and surface an opaque HTTP 401 instead. The preflight fails earlier with the bootstrap action needed. An unset `GITHUB_PAT_TOKEN` warning is independent and non-blocking for inference; it explains a concurrent GitHub MCP startup failure but must not be confused with OpenAI API authentication.
 
 The preflight's provider check is not cosmetic. A machine with the direct provider table and million-token catalogue present but root `model_provider = "openai"` is broken, even when every numeric value is otherwise correct.
+
+### Managed autoreview delivery
+
+Before an isolated review using this named route, also check the external helper with private home directories:
+
+```bash
+ruby ~/.codex/skills/agent-scripts/codex-huge-context/scripts/preflight.rb --private-home
+```
+
+This opt-in diagnostic validates the parent context first, then invokes the same trusted helper with fresh HOME/USERPROFILE and XDG config/data/state/cache directories. It captures and discards helper output in memory; it never copies credentials into files or environment variables. Other environment and working-directory settings remain inherited. This is not the complete sanitized reviewer environment, a sandbox test, or inference proof.
+
+Finish with an actual `$autoreview` run on the intended frozen Git target using `--codex-config 'model_provider="openai_api_direct"'` and the intended model unchanged. Preserve source scanning, auth projection, sandboxing, and all tool credential denials. Only the client-side auth command may read the existing Keychain delivery item; never test by asking reviewer tools to retrieve real credentials. If explicit selection still fails, report the exact secret-safe status and stop—no provider fallback, real-HOME propagation, secret file/env handoff, credential broker, or sandbox exception.
 
 ## ChatGPT connector login
 

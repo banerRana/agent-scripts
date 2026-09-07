@@ -6,6 +6,8 @@ summary: Timeline of guardrail helper changes mirrored from Sweetistics and rela
 
 ## Unreleased
 
+- Make Codex Keychain helper guidance independent of private reviewer HOME paths and add a secret-safe `--private-home` delivery diagnostic without changing reviewer isolation or provider selection.
+
 - Align shared Codex routing rules with the canonical `codex-first` skill and its launch recipe instead of stale saved-defaults guidance; preserve the model gate and isolated review workflow.
 
 - Added vm-lab bootstrap diagnostics for empty Apple-VZ clone disks and pre-output Bash heredoc stalls, with immutable-source safeguards and invocation-local shell fallback.
