@@ -26,13 +26,30 @@ Rules:
 - Validate after edits: `scripts/validate-skills`.
 - Quote `description` in front matter.
 
-Global discovery usually points here:
-- `~/.codex/skills -> ~/Projects/agent-scripts/skills`
-- `~/.claude/skills -> ~/Projects/agent-scripts/skills`
+Global discovery is built by `scripts/sync-skills` (idempotent; run on every Mac after cloning or adding skills):
+- Codex scans nested dirs, so it gets whole-root links: `~/.codex/skills/agent-scripts -> ~/Projects/agent-scripts/skills`, `~/.codex/skills/manager -> ~/Projects/manager/skills`.
+- Claude Code loads only `~/.claude/skills/<name>/SKILL.md` (exactly one level deep; per-entry symlinks are followed, category subfolders are not scanned — verified on 2.1.197). It gets a flat per-skill link mirror covering both repos plus machine-local `~/.codex/skills/<name>` extras.
+- Name collisions resolve agent-scripts > manager > codex-local; the script prints skipped duplicates and prunes broken/stale managed links.
+- Real destination files and directories are preserved. A real Claude skill directory with a Codex backlink to that same directory satisfies local ownership; other real destination conflicts are reported and make sync fail.
 
-Shared skills live as real folders in `skills/`. Repo-owned skills stay canonical in their repo and are exposed here with tracked relative symlinks, for example:
+For the specific legacy topology `~/.claude/skills/NAME/NAME -> ~/.codex/skills/NAME -> ~/.claude/skills/NAME`, invoke the sync owner directly with an explicit allowlist:
+
+```bash
+/absolute/path/to/agent-scripts/scripts/sync-skills --repair-nested-self-links --dry-run -- boxd-cli boxd-setup-deploy
+```
+
+```bash
+/absolute/path/to/agent-scripts/scripts/sync-skills --repair-nested-self-links -- boxd-cli boxd-setup-deploy
+```
+
+This mode validates every candidate before unlinking only the extra nested leaves. It preserves the real skill directories, assets, and valid Codex backlinks, and exits before creating roots, building mirrors, pruning, or touching instruction pointers. Names must start with an ASCII letter or digit and contain only letters, digits, `.`, `_`, or `-`; duplicates, missing names, and unknown arguments are rejected. A missing nested leaf is a no-op only with the expected surrounding topology. Redirected/inaccessible roots, unexpected objects or literal targets, and changed directory/link identities cause refusal. Rechecks before each unlink are not atomic concurrency protection; a later error stops the batch and reports removals already completed, without rollback.
+
+The read-only `skills/fleet-maintenance/scripts/agent-skill-links-audit.sh` reports same-name nested ancestor loops as `reason=nested-self-link`. This is narrow detection, not an exhaustive graph validator. Its `--repair` remains a broad sync through `~/Projects/agent-scripts/scripts/sync-skills`; it is not the scoped repair above. Run `scripts/test-sync-skills` for isolated fixture coverage; `scripts/test-sync-skills --recurrence-only /absolute/path/to/old-sync-skills` runs the unchanged recurrence assertion against an original helper.
+
+Shared personal skills live as real folders in `skills/`. Public OpenClaw shared skills live in `../agent-skills` and are exposed here with tracked relative symlinks. Repo-owned skills stay canonical in their repo and are exposed here the same way, for example:
 
 ```text
+skills/autoreview -> ../../agent-skills/skills/autoreview
 skills/discrawl -> ../../discrawl/.agents/skills/discrawl
 ```
 
@@ -42,7 +59,7 @@ Current symlinked repo-owned skills include `birdclaw`, `discrawl`, `gog`, `imsg
 
 Shared hard rules live in `AGENTS.MD`.
 
-Global setup:
+Global setup (also maintained by `scripts/sync-skills`; Claude Code reads `CLAUDE.md` only, so it links to the shared `AGENTS.MD`):
 - `~/.codex/AGENTS.md -> ~/Projects/agent-scripts/AGENTS.MD`
 - `~/.claude/CLAUDE.md -> ~/Projects/agent-scripts/AGENTS.MD`
 - `~/.claude/AGENTS.md -> ~/Projects/agent-scripts/AGENTS.MD`
@@ -57,10 +74,10 @@ Repo-specific rules go below that pointer. Do not copy the shared blocks into do
 
 ## Helpers
 
-`scripts/committer`
-- Stages exactly the listed files.
-- Enforces a non-empty commit message.
-- Runs skill validation before committing.
+`scripts/sync-skills`
+- Builds the per-machine skill mirror: Codex whole-root links, Claude flat per-skill links, shared `AGENTS.MD` pointers.
+- Idempotent; prints changes only, prunes broken/stale managed links, never clobbers real files.
+- No arguments runs ordinary sync; `--help` prints usage. Only the scoped `--repair-nested-self-links` mode accepts `--dry-run`.
 
 `scripts/validate-skills`
 - Checks every `skills/*/SKILL.md`.
@@ -74,7 +91,7 @@ Repo-specific rules go below that pointer. Do not copy the shared blocks into do
 
 `scripts/browser-tools.ts`
 - Standalone Chrome DevTools helper.
-- Common commands: `start --profile`, `nav <url>`, `eval '<js>'`, `screenshot`, `search --content "<query>"`, `content <url>`, `inspect`, `kill --all --force`.
+- Common commands: `start --profile`, `nav <url>`, `eval '<js>'`, `screenshot`, `console`, `network`, `search --content "<query>"`, `content <url>`, `inspect`, `kill --all --force`.
 - Build optional binary with `bun build scripts/browser-tools.ts --compile --target bun --outfile bin/browser-tools`.
 
 ## Syncing

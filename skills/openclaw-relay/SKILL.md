@@ -1,6 +1,6 @@
 ---
 name: openclaw-relay
-description: "OpenClaw session relay: prompts/posts via local acpx or remote acpx over SSH."
+description: "OpenClaw session relay: prompts/posts via local/remote acpx over SSH."
 ---
 
 # OpenClaw Relay
@@ -100,6 +100,9 @@ python3 scripts/openclaw_relay.py force-send \
   --target maintainers \
   --text "Deploy is done."
 ```
+
+For multiline posts, use `--text-file <path>` or `--text-file -` instead of
+shell-quoting the message.
 
 Force-send media when the user explicitly wants a channel post:
 

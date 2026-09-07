@@ -1,34 +1,43 @@
 ---
 name: github-cache-hygiene
-description: "GitHub quota/cache hygiene: gh, ghx, xcache, gitcrawl, mirrors, rate limits."
+description: "GitHub quota/cache hygiene: Gitcrawl archives, Octopool-backed gh, freshness, limits."
 ---
 
 # GitHub Cache Hygiene
 
-Goal: answer common GitHub read questions from gitcrawl and the `gh` shim first, then spend live GitHub API calls only where freshness or writes matter.
+Goal: discover in the local Gitcrawl archive first, then use the existing Octopool-backed `gh` shim for current GitHub metadata and authorized writes.
 
 ## Default Path
 
-Use `gh` normally. On Peter's machines it is expected to be the gitcrawl-backed shim, so supported reads can be answered locally or cached without changing commands.
-
-Prefer these local/cached reads:
+Start with local archive reads:
 
 ```bash
-gitcrawl sync owner/repo --numbers 123 --with pr-details
+gitcrawl search prs "<terms>" -R owner/repo --state open --json number,title,url
+```
+
+```bash
+gitcrawl threads owner/repo --numbers 123 --include-closed --json
+```
+
+`--include-closed` keeps closed or merged candidates in scope. Archive state can lag GitHub; it is not proof of current state.
+
+Then use bare PATH `gh` when current metadata is needed. On Peter's machines it is expected to be the Octopool-backed shim, so supported JSON reads share the fleet cache without changing authentication or command routing:
+
+```bash
 gh search issues "<terms>" -R owner/repo --state open --json number,title,state,url,updatedAt,labels,author
 gh search prs "<terms>" -R owner/repo --state open --json number,title,state,url,updatedAt,isDraft,author
 gh issue list -R owner/repo --state open --author user --assignee user --label bug --json number,title,url
 gh pr list -R owner/repo --state open --author user --label dependencies --json number,title,url
 gh issue view 123 -R owner/repo --json number,title,state,body,comments,labels,url
-gh pr view 123 -R owner/repo --json number,title,state,body,comments,labels,files,commits,statusCheckRollup,url
-gh pr checks 123 -R owner/repo --json name,state,detailsUrl,workflow
+gh pr view 123 -R owner/repo --json number,title,state,url,headRefName,headRefOid
+gh pr checks 123 -R owner/repo --json name,state,bucket,link
 gh run list -R owner/repo --branch branch-name --json databaseId,workflowName,status,conclusion,url
 gh pr diff 123 -R owner/repo --patch
 ```
 
 Use exact refs and narrow fields. Avoid broad loops like one `gh issue view` per result when a single `gh search` or `gh issue list --json ...` can answer the first-pass question.
 
-For CI, avoid tight `gh run list` / `gh run view` polling loops. After a push or workflow dispatch, identify one exact run, then poll it with backoff. Fetch full logs only for failed jobs or when the user explicitly asks for logs. Completed-style `gh run view --log`, `--log-failed`, and common Actions REST log endpoints are cached longer by gitcrawl, while run status stays short-lived.
+For CI, avoid tight `gh run list` / `gh run view` polling loops. After a push or workflow dispatch, identify one exact run, then poll that run at 30s, 60s, then 120s intervals. Fetch logs once, only after failure or explicit request. Reuse prior output instead of re-reading completed runs.
 
 ## Freshness
 
@@ -42,30 +51,39 @@ Use a live call when:
 - the local result is missing or obviously stale
 - the user asks for latest/live state
 
-For PR review, prefer hydrating exact PR details once with `gitcrawl sync owner/repo --numbers <n> --with pr-details` when you know you will inspect files, commits, checks, or run summaries repeatedly. The `gh` shim can auto-hydrate one exact PR on miss, using `GITHUB_TOKEN` or `gh auth token`; explicit hydration makes intent and cost clearer.
+Hydrate exact PR details only when the local archive needs files, commits, checks, or run summaries for repeated review:
+
+```bash
+gitcrawl sync owner/repo --numbers 123 --with pr-details
+```
+
+This refresh spends GitHub API calls and updates Gitcrawl's archive, not Octopool's separate `gh` cache. Bare `gh` reads do not auto-hydrate the Gitcrawl archive.
+
+`gitcrawl gh` is retired and exits `2` with a migration note. Replace those recipes with archive reads followed by bare `gh`; the note is not an authentication failure. Do not run `octopool login`, change tokens/auth/PATH/config, or bypass the existing shim to repair a retired command.
 
 After a write, do one targeted readback, not a broad rescan.
 
-## XCache
+## Octopool
 
 Inspect cache behavior when rate limits are suspected:
 
 ```bash
-gh xcache stats
-gh xcache keys
-gh xcache gc
+octopool whoami
+octopool health
+octopool stats --since 1h
+octopool stats --since 24h --json
 ```
 
-Read `backend_misses_by_command` and `backend_misses_by_route` in `gh xcache stats --json` before adding new live GitHub loops. Those maps show which command shapes are still escaping the cache.
+Check the saved-vs-backend totals, eligible hit rate, top route kinds, fallbacks, and client attribution. A missing client or unexpected server means that machine is outside the shared fleet cache.
 
-Use `gh xcache flush` only when a stale cached fallback read is misleading a decision.
+Use `OCTOPOOL_NO_FALLBACK=1` only for a bounded read probe that must prove relay coverage. Do not set it globally; mutations and unsupported reads still need real `gh`.
 
-For local-only proof, temporarily make the backend unavailable for a single command:
+For relay-only proof:
 
 ```bash
-GITCRAWL_GH_PATH=/tmp/no-real-gh gh search issues "<terms>" -R owner/repo --json number,title,url
+OCTOPOOL_NO_FALLBACK=1 gh api repos/owner/repo --jq .full_name
 ```
 
 ## Agent Etiquette
 
-Batch questions by repo and state. Reuse data already printed in the session. Back off CI polling; inspect logs only for failing runs or the exact run under review. Do not bypass the shim with `/opt/homebrew/opt/gh/bin/gh` unless diagnosing the shim itself.
+Batch questions by repo and state. Reuse data already printed in the session. Back off CI polling; inspect logs only once for a failed run. Use bare PATH `gh` for ordinary reads and authorized writes; let Octopool own fallback to the real CLI. Do not bypass the shim with an absolute real-`gh` path or a binary override to replace retired Gitcrawl recipes.

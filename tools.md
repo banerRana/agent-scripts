@@ -5,7 +5,7 @@ CLI tools available on Peter's machines. Use these for agentic tasks.
 ## bird 🐦
 Twitter/X CLI for posting, replying, reading tweets.
 
-**Location**: `~/Projects/bird/bird`
+**Location**: `bird` on PATH (Homebrew); repo `~/Projects/bird`
 
 **Commands**:
 ```bash
@@ -27,7 +27,7 @@ bird check                             # Show credential sources
 ## sonoscli 🔊
 Control Sonos speakers over local network (UPnP/SOAP).
 
-**Location**: `~/Projects/sonoscli/bin/sonos`
+**Location**: `sonos` on PATH (Homebrew); repo `~/Projects/sonoscli`
 
 **Commands**:
 ```bash
@@ -51,22 +51,24 @@ sonos open --name "Room" spotify:track:<id>
 
 **Known issues**:
 - SSDP multicast may fail; use `--ip <speaker-ip>` as fallback
-- Default HTTP keep-alives can cause timeouts (fix pending: DisableKeepAlives)
 
 ---
 
 ## peekaboo 👀
 Screenshot, screen inspection, and click automation.
 
-**Location**: `~/Projects/Peekaboo`
+**Location**: `peekaboo` on PATH (Homebrew); repo `~/Projects/Peekaboo`
 
 **Commands**:
 ```bash
-peekaboo capture                       # Take screenshot
-peekaboo see                           # Describe what's on screen (OCR)
-peekaboo click                         # Click at coordinates
-peekaboo list                          # List windows/apps
-peekaboo tools                         # Show available tools
+peekaboo see --no-elements             # Capture pixels without UI detection
+peekaboo see --tree --no-screenshot    # Inspect Accessibility without capture
+peekaboo click --on ELEMENT_ID --snapshot SNAPSHOT_ID # Act on a fresh observed element
+peekaboo press Return --app TextEdit --window-id 1234 # Send to an exact window
+peekaboo app list                      # List applications
+peekaboo window list --app Safari      # List one application's windows
+peekaboo screen list                   # List displays
+peekaboo tools                         # Show available MCP tools
 peekaboo permissions status            # Check TCC permissions
 ```
 
@@ -82,22 +84,6 @@ Twitter/X analytics desktop app (Tauri).
 **Location**: `~/Projects/sweetistics`
 
 Use for deeper Twitter data analysis beyond what `bird` provides.
-
----
-
-## clawdis 📡
-WhatsApp/Telegram messaging gateway and agent interface.
-
-**Location**: `~/Projects/clawdis`
-
-**Commands**:
-```bash
-clawdis login                          # Link WhatsApp via QR
-clawdis send --to <number> --message "text"  # Send message
-clawdis agent --message "text"         # Talk to agent directly
-clawdis gateway                        # Run WebSocket gateway
-clawdis status                         # Session health
-```
 
 ---
 
@@ -125,6 +111,6 @@ gh run list / gh run view <id>
 ## mcporter
 MCP server launcher for browser automation, web scraping.
 
-**Usage**: `npx mcporter --help`
+**Usage**: `mcporter --help` (on PATH via Homebrew)
 
 Common servers: `iterm`, `firecrawl`, `XcodeBuildMCP`

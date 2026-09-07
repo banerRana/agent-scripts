@@ -1,6 +1,6 @@
 ---
 name: github-deep-review
-description: "GitHub deep review: bugs, PRs, best fix, stale-or-real, read-code-first."
+description: "GitHub deep review: bugs, PRs, best fix, stale-or-real, read code first."
 ---
 
 # GitHub Deep Review
@@ -38,6 +38,7 @@ Always answer these, explicitly:
 - URL/ref: issue or PR number and affected surface.
 - What is the bug or behavior being fixed?
 - Can we identify the root cause? If yes, where in code and why. If no, what evidence is missing.
+- For regressions, who/what introduced it and when? Include commit/PR provenance when traceable by bounded history; say unknown instead of guessing.
 - Is the current/proposed fix the best possible fix after reading adjacent code?
 - Would a bigger refactor improve correctness, clarity, or future maintainability?
 - What proof exists: tests, live repro, CI checks, docs, dependency docs/source, shipped/current behavior.
@@ -55,6 +56,16 @@ Read past the first touched file. Follow the real call path:
 When behavior depends on a dependency, read the upstream docs/source/types or current package contract before assuming.
 
 Prefer current source and executable proof over issue comments. Treat stale comments, old CI, and old release behavior as hints until rechecked.
+
+## Provenance
+
+For bug/regression reviews, include a compact `Provenance:` answer when feasible:
+
+- Use `git log -S/-G`, `git blame`, and linked PRs/issues to locate candidates, not prove introduction. Before saying `introduced by`, inspect raw parents with `git --no-replace-objects cat-file -p <sha>` and verify that `git --no-replace-objects diff --no-ext-diff --no-textconv <raw-parent> <sha> -- <path>` changed the implicated behavior, using tests/repro when feasible. A genuine root needs raw-header proof that it has no parents.
+- Blame `^sha`, porcelain `boundary`, and shallow/grafted history alone are not introduction proof. `--root` can hide boundary markers; `git show` and `rev-list --parents` can disguise a shallow boundary as a root. An available raw parent permits explicit comparison even at a shallow boundary; missing parents or an unverifiable patch require `unknown` with the gap, not inference from a subject, date, or author.
+- Separate code author, introducing PR author, merger, committer, automation trigger, and current PR author. Verify identities and triggers from explicit metadata/events; a role is not proof of causation, and an unverified identity stays unknown.
+- Use `made visible by` only for a verified trigger and `carried forward by` only for verified preexisting behavior. Apply the same evidence bar to summaries and owner hints, not just a `Provenance:` field. Include confidence: `clear`, `likely`, or `unknown`.
+- For features, docs, and refactors, write `N/A`; for untraceable bugs, report `unknown` with the missing evidence. Missing provenance does not invalidate an independently proven bug.
 
 ## Fix Quality Bar
 
@@ -104,6 +115,7 @@ Surface: <runtime/CLI/provider/channel/docs>
 
 Bug: <one or two sentences>
 Cause: <code path + confidence>
+Provenance: <introduced/made visible/carried forward by commit/PR/date, or N/A/unknown>
 Best fix: <what should change and why>
 Refactor: <yes/no, specific shape>
 Proof: <tests/live/CI/source/dependency docs>

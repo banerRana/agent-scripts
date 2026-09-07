@@ -1,6 +1,6 @@
 ---
 name: speaking
-description: "Speaking ops: invites, keynotes, panels, Gmail/calendar, conferences repo, Inbounds."
+description: "Speaking ops: invites, keynotes, panels, Gmail/calendar, conferences."
 ---
 
 # Speaking
@@ -9,6 +9,7 @@ Use this for Peter's speaking-opportunity workflow.
 
 ## Sources
 
+- **Strategy (read first, always): `/Users/steipete/Projects/manager/CONFERENCES.md`** — standing decisions (e.g. no TED, no paid talks), 2027 budget, anchor plan, triage tiers.
 - Repo: `/Users/steipete/Projects/conferences`
 - Sheet: `Peter Steinberger Inbounds`
 - Sheet URL: https://docs.google.com/spreadsheets/d/1dNt5EjgfgvPoAx5fa-igk681gniCkzL-IZ2FmjFl8fs/edit?gid=0#gid=0

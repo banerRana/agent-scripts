@@ -17,7 +17,7 @@ Reusable checklist distilled from recent VibeTunnel, Trimmy, and CodexBar releas
 - Long-running steps (build, notarization, release scripts) should run in tmux/screen to avoid timeouts.
 
 ## Prerequisites
-- Tools: Xcode 16.4+ (or project minimum), `swift` toolchain, `notarytool`, Sparkle CLI (`sign_update`, `generate_appcast`), `gh`.
+- Tools: Xcode 16.4+ (or project minimum), `swift` toolchain, `notarytool`, Sparkle CLI (`sign_update`, `generate_keys`, `generate_appcast`), `gh`.
 - Credentials in env (export once per session):
   - `APP_STORE_CONNECT_KEY_ID`, `APP_STORE_CONNECT_ISSUER_ID`, `APP_STORE_CONNECT_API_KEY_P8`
   - `SPARKLE_PRIVATE_KEY_FILE` (file-based ed25519 key) and, if used, `SPARKLE_ACCOUNT`
@@ -72,14 +72,15 @@ for v in /Volumes/*; do [[ $v == */<App>* ]] && hdiutil detach "$v" -force; done
 - Notarization via `notarytool` with the exported API key; staple after success.
 - Before zipping, strip resource forks/extended attributes from the app (`xattr -cr <App>.app && find <App>.app -name '._*' -delete`) and zip with `ditto --norsrc -c -k --keepParent …` to avoid AppleDouble files that invalidate signatures.
 - Avoid `unzip` when testing locally; use `ditto -x -k <zip> /Applications` to prevent `._*` files that break signatures.
-- The shared release helpers now always download the enclosure, verify the ed25519 signature, and run `codesign --verify` + `spctl` on the extracted app before publishing—no opt-in flag needed.
+- The shared release helpers now always download the enclosure, verify the ed25519 signature, and run `codesign --verify` plus the system distribution policy check on the extracted app before publishing—no opt-in flag needed. They prefer `syspolicy_check distribution` and fall back to `spctl` on older macOS versions.
 
-### Shared release helpers (release/sparkle_lib.sh)
-- `require_clean_worktree` — fail fast if git is dirty.
-- `probe_sparkle_key` — quick sign_update probe to ensure the private key is usable.
-- `ensure_changelog_finalized <version>` — top changelog section must match the version and not be “Unreleased”.
-- `ensure_appcast_monotonic <appcast> <version> <build>` — blocks if the appcast already has that version or if the build is not greater than the latest entry.
-- `extract_notes_from_changelog <version> <dest>` — pulls the release-notes slice for reuse in GitHub releases/automation.
+### Shared release skill
+- Canonical entry point: `~/Projects/agent-scripts/skills/release-mac-app/scripts/mac-release`.
+- Each app repo owns a `.mac-release.env` manifest with app metadata, artifact names, feed URLs, key public-key expectation, and repo-local package/precheck commands.
+- Repo scripts should call a checked-in `Scripts/mac-release` resolver, which uses `MAC_RELEASE_TOOL`, a sibling `../agent-scripts` checkout, or `~/Projects/agent-scripts`.
+- Release scripts should be thin wrappers around `Scripts/mac-release` commands (`release`, `make-appcast`, `verify-appcast`, `check-assets`, `changelog-html`, `notes`).
+- `release/sparkle_lib.sh` is a compatibility shim only; do not build new app integrations on it.
+- `mac-release release` checks a clean tree, finalized changelog, monotonic appcast version/build, Sparkle key/public-key match, precheck command, package command, appcast generation/verification, GitHub release assets, and optional live update smoke.
 
 ## Sparkle Signing & Appcast
 **Policy:** Ship full updates only (no deltas). Remove any `<sparkle:deltas>` blocks before publishing the appcast.
@@ -114,7 +115,7 @@ sign_update -f "$SPARKLE_PRIVATE_KEY_FILE" path/to/<App>-<ver>.dmg --account "${
 
 ## Verification (Definition of Done)
 - Download the published artifact, install via `ditto`, launch, and verify:
-  - `spctl --assess --type execute --verbose <App>.app`
+  - `syspolicy_check distribution <App>.app` (or `spctl --assess --type execute --verbose <App>.app` on older macOS versions)
   - `codesign --verify --deep --strict --verbose <App>.app`
   - `stapler validate <App>.app`
 - Check Sparkle update path from the previous installed build (stable and prerelease if applicable).
@@ -128,7 +129,7 @@ sign_update -f "$SPARKLE_PRIVATE_KEY_FILE" path/to/<App>-<ver>.dmg --account "${
 ## Final Sign-Off (agent handoff)
 - Re-read the GitHub release page: title exactly `<App> <version>`; body matches the curated changelog (no missing/extra bullets).
 - Re-open the appcast in a browser/`curl` to confirm the new entry, signature, and enclosure URL are present and 200/OK.
-- Confirm local checks: `spctl`, `codesign`, `stapler` on the downloaded artifact; app launches; update path works from previous build.
+- Confirm local checks: system distribution policy, `codesign`, and `stapler` on the downloaded artifact; app launches; update path works from previous build.
 - Log any deviations or manual fixes (e.g., regenerated signature) in the task notes before handing off.
 
 ## Recovery / Resume
@@ -150,7 +151,7 @@ sign_update -f "$SPARKLE_PRIVATE_KEY_FILE" path/to/<App>-<ver>.dmg --account "${
 - [ ] Verify the published enclosure matches the appcast entry: `curl -L -o /tmp/update.zip <enclosure-url> && sign_update --verify /tmp/update.zip <appcast-signature> -f "$SPARKLE_PRIVATE_KEY_FILE"` (fails if the wrong key/signature is used).
 - [ ] Tag + GitHub release created; assets uploaded; URLs in appcast resolve (200/OK).
 - [ ] After publishing, bump `CHANGELOG.md`: move the shipped notes under the released version, increment its patch number, and start a new `Unreleased` section for the next patch.
-- [ ] Downloaded artifact passes `spctl`, `codesign`, `stapler`; no `._*` files.
+- [ ] Downloaded artifact passes system distribution policy, `codesign`, and `stapler`; no `._*` files.
 - [ ] Update flow validated from a previous version (if appcast was edited, re-run a live update after the change to confirm the new signature is accepted; clear `~/Library/Caches/com.<bundle-id>` if Sparkle cached a bad download).
 - [ ] Appcast shows the correct notes (single-version chunk), and artifact size looks sane.
 - [ ] GitHub release notes header is `<App> <version>` and body matches changelog bullets exactly.

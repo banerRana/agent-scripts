@@ -8,15 +8,17 @@
  * directly via the DevTools protocol without pulling in a large MCP server.
  */
 import { Command } from 'commander';
-import { execSync, spawn } from 'node:child_process';
+import { execFileSync, execSync, spawn } from 'node:child_process';
+import { cpSync, existsSync, lstatSync, mkdirSync, readdirSync, realpathSync, rmSync, statSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import readline from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';
+import { fileURLToPath } from 'node:url';
 import { inspect } from 'node:util';
-import puppeteer from 'puppeteer-core';
+import puppeteer, { type HTTPRequest } from 'puppeteer-core';
 
 /** Utility type so TypeScript knows the async function constructor */
 type AsyncFunctionCtor = new (...args: string[]) => (...fnArgs: unknown[]) => Promise<unknown>;
@@ -31,6 +33,60 @@ function browserURL(port: number): string {
 
 async function connectBrowser(port: number) {
   return puppeteer.connect({ browserURL: browserURL(port), defaultViewport: null });
+}
+
+function resolveComparablePath(inputPath: string): string {
+  let existingPath = path.resolve(inputPath);
+  const missingSegments: string[] = [];
+  while (!existsSync(existingPath)) {
+    const parent = path.dirname(existingPath);
+    if (parent === existingPath) break;
+    missingSegments.unshift(path.basename(existingPath));
+    existingPath = parent;
+  }
+  return path.join(realpathSync(existingPath), ...missingSegments);
+}
+
+function pathsOverlap(first: string, second: string): boolean {
+  const relative = path.relative(first, second);
+  return relative === '' || (!relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative));
+}
+
+export function copyChromeProfile(sourceDir: string, profileDir: string): void {
+  const source = realpathSync(sourceDir);
+  if (!statSync(source).isDirectory()) {
+    throw new Error('Chrome profile source must be a directory');
+  }
+
+  let destinationLinkExists = false;
+  try {
+    destinationLinkExists = lstatSync(profileDir).isSymbolicLink();
+  } catch {
+    // Missing destinations are created below.
+  }
+  if (destinationLinkExists && !existsSync(profileDir)) {
+    throw new Error('Chrome profile destination symlink target does not exist');
+  }
+
+  let destination = resolveComparablePath(profileDir);
+  if (pathsOverlap(source, destination) || pathsOverlap(destination, source)) {
+    throw new Error('Chrome profile source and destination must not overlap');
+  }
+
+  if (existsSync(profileDir) && statSync(profileDir).isDirectory()) {
+    for (const entry of readdirSync(destination)) {
+      rmSync(path.join(destination, entry), { recursive: true, force: true });
+    }
+  } else {
+    rmSync(profileDir, { recursive: true, force: true });
+    mkdirSync(profileDir, { recursive: true });
+    destination = resolveComparablePath(profileDir);
+  }
+  cpSync(source, destination, {
+    recursive: true,
+    force: true,
+    verbatimSymlinks: true,
+  });
 }
 
 async function getActivePage(port: number) {
@@ -70,16 +126,16 @@ program
 
     if (killExisting) {
       try {
-        execSync("killall 'Google Chrome'", { stdio: 'ignore' });
+        execFileSync('killall', ['Google Chrome'], { stdio: 'ignore' });
       } catch {
         // ignore missing processes
       }
       await new Promise((resolve) => setTimeout(resolve, 1000));
     }
-    execSync(`mkdir -p "${profileDir}"`);
+    mkdirSync(profileDir, { recursive: true });
     if (profile) {
-      const source = `${path.join(os.homedir(), 'Library', 'Application Support', 'Google', 'Chrome')}/`;
-      execSync(`rsync -a --delete "${source}" "${profileDir}/"`, { stdio: 'ignore' });
+      const source = path.join(os.homedir(), 'Library', 'Application Support', 'Google', 'Chrome');
+      copyChromeProfile(source, profileDir);
     }
 
     spawn(chromePath, [`--remote-debugging-port=${port}`, `--user-data-dir=${profileDir}`, '--no-first-run', '--disable-popup-blocking'], {
@@ -416,14 +472,13 @@ program
   .option('--timeout <seconds>', 'Capture duration in seconds (default: 5 for one-shot, infinite for --follow)', (value) => Number.parseInt(value, 10))
   .option('--color', 'Force color output')
   .option('--no-color', 'Disable color output')
-  .option('--no-serialize', 'Disable object serialization (show raw text only)', false)
+  .option('--no-serialize', 'Disable object serialization (show raw text only)')
   .action(async (options) => {
     const port = options.port as number;
     const follow = options.follow as boolean;
     const timeout = options.timeout as number | undefined;
     const typesFilter = options.types as string | undefined;
-    const noSerialize = options.noSerialize as boolean;
-    const serialize = !noSerialize;
+    const serialize = options.serialize !== false;
 
     // Track explicit color flags by looking at argv to avoid Commander defaults overriding TTY detection.
     const argv = process.argv.slice(2);
@@ -573,6 +628,129 @@ program
         // One-shot mode with timeout
         const duration = timeout ?? 5;
         console.log(gray(`Capturing console logs for ${duration} seconds...`));
+        await new Promise((resolve) => setTimeout(resolve, duration * 1000));
+      }
+    } finally {
+      await browser.disconnect();
+    }
+  });
+
+program
+  .command('network')
+  .description('Capture network requests from the active tab from attach time; websocket shows only the upgrade handshake.')
+  .option('--port <number>', 'Debugger port (default: 9222)', (value) => Number.parseInt(value, 10), DEFAULT_PORT)
+  .option('--types <list>', 'Comma-separated resource types (e.g., xhr,fetch,document). Default: all')
+  .option('--follow', 'Continuous monitoring mode (like tail -f)', false)
+  .option('--timeout <seconds>', 'Capture duration in seconds (default: 5 for one-shot, infinite for --follow)', (value) => Number.parseInt(value, 10))
+  .option('--color', 'Force color output')
+  .option('--no-color', 'Disable color output')
+  .action(async (options) => {
+    const port = options.port as number;
+    const follow = options.follow as boolean;
+    const timeout = options.timeout as number | undefined;
+    const typesFilter = options.types as string | undefined;
+
+    // Track explicit color flags by looking at argv to avoid Commander defaults overriding TTY detection.
+    const argv = process.argv.slice(2);
+    const colorFlag = argv.includes('--color') ? true : argv.includes('--no-color') ? false : undefined;
+
+    // Determine if we should use colors: explicit flag or TTY auto-detection
+    const useColor = colorFlag ?? process.stdout.isTTY;
+
+    const allowedTypes = typesFilter
+      ? new Set(typesFilter.split(',').map((t) => t.trim().toLowerCase()))
+      : null; // null means show all types
+
+    // Color functions (no-op if colors disabled)
+    const colorize = (text: string, colorCode: string) => (useColor ? `\x1b[${colorCode}m${text}\x1b[0m` : text);
+    const red = (text: string) => colorize(text, '31');
+    const yellow = (text: string) => colorize(text, '33');
+    const green = (text: string) => colorize(text, '32');
+    const cyan = (text: string) => colorize(text, '36');
+    const gray = (text: string) => colorize(text, '90');
+    const white = (text: string) => text;
+
+    const statusColor = (status: number) => {
+      if (status >= 400) return red;
+      if (status >= 300) return yellow;
+      if (status >= 200) return green;
+      return white;
+    };
+
+    const pad = (s: string, width: number) => (s.length >= width ? s : s + ' '.repeat(width - s.length));
+
+    // Helper function definitions (outside try/catch as they don't need error handling)
+    const formatTimestamp = () => {
+      const now = new Date();
+      return now.toTimeString().split(' ')[0] + '.' + now.getMilliseconds().toString().padStart(3, '0');
+    };
+
+    // Execution code (needs try/catch for error handling)
+    const { browser, page } = await getActivePage(port);
+
+    try {
+      // Same HTTPRequest instance reaches response/failure; WeakMap avoids URL collisions.
+      const requestStartedAt = new WeakMap<HTTPRequest, number>();
+
+      page.on('request', (req) => {
+        const resourceType = req.resourceType();
+        if (allowedTypes && !allowedTypes.has(resourceType)) {
+          return;
+        }
+        requestStartedAt.set(req, Date.now());
+        console.log(`${cyan('[REQ ]')} ${gray(formatTimestamp())} ${pad(req.method(), 6)} ${pad(resourceType, 9)} ${req.url()}`);
+      });
+
+      page.on('response', (resp) => {
+        const req = resp.request();
+        const resourceType = req.resourceType();
+        if (allowedTypes && !allowedTypes.has(resourceType)) {
+          return;
+        }
+        const status = resp.status();
+        const startedAt = requestStartedAt.get(req);
+        const ms = startedAt !== undefined ? Date.now() - startedAt : undefined;
+        const durationStr = ms !== undefined ? gray(` (${ms}ms)`) : '';
+        console.log(`${statusColor(status)('[RESP]')} ${gray(formatTimestamp())} ${pad(String(status), 6)} ${pad(resourceType, 9)} ${req.url()}${durationStr}`);
+      });
+
+      page.on('requestfailed', (req) => {
+        const resourceType = req.resourceType();
+        if (allowedTypes && !allowedTypes.has(resourceType)) {
+          return;
+        }
+        const failure = req.failure();
+        const reason = failure ? failure.errorText : 'unknown';
+        console.log(`${red('[FAIL]')} ${gray(formatTimestamp())} ${pad(req.method(), 6)} ${pad(resourceType, 9)} ${req.url()}  ${red('(' + reason + ')')}`);
+      });
+
+      if (follow) {
+        // Continuous monitoring mode
+        console.log(gray('Monitoring network requests (Ctrl+C to stop)...'));
+        const waitForExit = () =>
+          new Promise<void>((resolve) => {
+            const signals: NodeJS.Signals[] = ['SIGINT', 'SIGTERM', 'SIGHUP'];
+            const onSignal = () => {
+              cleanup();
+              resolve();
+            };
+            const onBeforeExit = () => {
+              cleanup();
+              resolve();
+            };
+            const cleanup = () => {
+              signals.forEach((signal) => process.off(signal, onSignal));
+              process.off('beforeExit', onBeforeExit);
+            };
+            signals.forEach((signal) => process.on(signal, onSignal));
+            process.on('beforeExit', onBeforeExit);
+          });
+
+        await waitForExit();
+      } else {
+        // One-shot mode with timeout
+        const duration = timeout ?? 5;
+        console.log(gray(`Capturing network requests for ${duration} seconds...`));
         await new Promise((resolve) => setTimeout(resolve, duration * 1000));
       }
     } finally {
@@ -828,8 +1006,8 @@ async function ensureReadability(page: any) {
     // ignore
   }
   const scripts = [
-    'https://unpkg.com/@mozilla/readability@0.4.4/Readability.js',
-    'https://unpkg.com/turndown@7.1.2/dist/turndown.js',
+    'https://unpkg.com/@mozilla/readability@0.6.0/Readability.js',
+    'https://unpkg.com/turndown@7.2.4/dist/turndown.js',
     'https://unpkg.com/turndown-plugin-gfm@1.0.2/dist/turndown-plugin-gfm.js',
   ];
   for (const src of scripts) {
@@ -1041,4 +1219,22 @@ function fetchJson(url: string, timeoutMs = 2000): Promise<unknown> {
   });
 }
 
-program.parseAsync(process.argv);
+export function isMainModule(
+  metaMain: boolean | null | undefined = import.meta.main,
+  argvPath: string | undefined = process.argv[1],
+  moduleUrl: string = import.meta.url,
+): boolean {
+  if (typeof metaMain === 'boolean') return metaMain;
+  if (!argvPath) return false;
+
+  const modulePath = fileURLToPath(moduleUrl);
+  try {
+    return realpathSync(argvPath) === realpathSync(modulePath);
+  } catch {
+    return path.resolve(argvPath) === modulePath;
+  }
+}
+
+if (isMainModule()) {
+  void program.parseAsync(process.argv);
+}
